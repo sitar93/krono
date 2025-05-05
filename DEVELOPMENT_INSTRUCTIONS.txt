@@ -1,0 +1,98 @@
+KRONO FIRMWARE DEVELOPMENT INSTRUCTIONS
+
+This file contains basic instructions for compiling (building), uploading, and modifying the KRONO module firmware.
+
+## Prerequisites
+- PlatformIO Core must be installed: https://platformio.org/install/cli
+- (Recommended) Visual Studio Code (VS Code) with the PlatformIO IDE extension installed: https://platformio.org/platformio-ide
+
+## PlatformIO Commands (Terminal/CLI)
+
+These commands should be run from the root directory of this project in your terminal.
+
+*   **Compile (Build):**
+    ```bash
+    platformio run -e blackpill_f401ce
+    ```
+    This command compiles the source code, links libraries, and creates the firmware binary (`firmware.bin`) inside the `.pio/build/blackpill_f401ce/` directory.
+
+*   **Upload:**
+    ```bash
+    platformio run -e blackpill_f401ce --target upload
+    ```
+    This command uploads the compiled firmware (`firmware.bin`) to the board using the DFU protocol specified in `platformio.ini`.
+
+    **IMPORTANT: Entering DFU Mode**
+    To upload, the board MUST be in DFU (Device Firmware Update) mode:
+    1.  Identify the two buttons on the Krono PCB. Usually, they are labeled BOOT0 (or just BOOT) and NRST (Reset).
+    2.  Press and HOLD the BOOT0 button (often the one closer to the USB connector).
+    3.  While continuing to hold BOOT0, press and RELEASE the NRST button (the other one).
+    4.  Release the BOOT0 button.
+    *(This sequence can typically be done while the board is already connected via USB.)*
+    The device should now enumerate as "STM32 BOOTLOADER" or similar in DFU mode. If you check the Device Manager (Windows) or equivalent, you should see it listed under Universal Serial Bus devices or similar, possibly with a warning icon if the driver is missing.
+
+    **Device Recognition Issues (Windows):**
+    *   PlatformIO relies on `dfu-util`. Make sure it's installed or install it via PlatformIO's driver installation (`pio drivers install dfu-util`).
+    *   If Windows does not recognize the "STM32 BOOTLOADER" device correctly even in DFU mode, you may need to use the **Zadig** tool (https://zadig.akeo.ie/) to replace the driver.
+    *   In Zadig, select "List All Devices" from the Options menu. Find "STM32 BOOTLOADER". Select "WinUSB" as the target driver and click "Replace Driver".
+
+*   **Clean:**
+    ```bash
+    platformio run -e blackpill_f401ce --target clean
+    ```
+    Removes compiled files (`.pio` directory) and cleans the build environment. Useful if you encounter strange build errors.
+
+*   **Serial Monitor (Optional):**
+    ```bash
+    platformio device monitor
+    ```
+    Opens a serial monitor to view output from the device (requires a separate USB-to-Serial adapter connected to the appropriate pins, as DFU uses the main USB). Check `platformio.ini` for port and speed configuration (baud rate, etc.).
+
+## Building and Uploading with VS Code (Recommended GUI Method)
+
+If you have VS Code and the PlatformIO IDE extension installed:
+
+1.  **Open Project:** Open the root folder of this project (`krono_code_v1.0`) in VS Code.
+2.  **PlatformIO Toolbar:** Look for the PlatformIO icon (a small alien head) in the VS Code activity bar (usually on the left). Click it to open the PlatformIO sidebar.
+3.  **Project Tasks:** In the PlatformIO sidebar, find the project environment (`blackpill_f401ce`). Expand it to see the available tasks under "General" and "Platform".
+4.  **Build:** Click the "Build" task (or the checkmark icon in the status bar at the bottom). PlatformIO will compile the code. Check the integrated terminal for output and errors.
+5.  **Upload:**
+    *   Put the board into **DFU Mode** (see instructions above).
+    *   Click the "Upload" task in the PlatformIO sidebar (or the right-arrow icon in the status bar). PlatformIO will attempt to upload the firmware via DFU.
+
+
+## Modifying the Code
+
+*   **Code Structure Overview:**
+    *   `src/main.c`: The heart of the application. Initializes all peripherals and modules, contains the main infinite loop (`while(1)`), manages the core state (tempo, modes), and implements callbacks registered by other modules (like `input_handler`). Handles the Aux LED blinking.
+    *   `src/drivers/`: Hardware Abstraction Layer (HAL). Contains code interacting directly with microcontroller peripherals.
+        *   `io.c/h`: GPIO setup for inputs/outputs, functions to set output states (`set_output`), and the hardware timer (TIM3) based pulse generation (`set_output_high_for_duration`).
+        *   `tap.c/h`: Handles the Tap Tempo button input (PA0) using an external interrupt (EXTI0) to detect taps and measure raw intervals.
+        *   `persistence.c/h`: Manages saving and loading the application state (`krono_state_t`) to/from the microcontroller's internal Flash memory to retain settings across power cycles.
+        *   `ext_clock.c/h`: Handles the External Clock input (PB3) using an external interrupt (EXTI3), performs debouncing and interval validation.
+        *   `rtc.c/h`: Provides functions to access the Real-Time Clock's Backup Registers (though not used for timekeeping, used by older persistence versions, potentially removable if BKP registers aren't needed).
+    *   `src/modes/`: Contains the logic specific to each operational mode.
+        *   `modes.h`: Defines the core `operational_mode_t` and `calculation_mode_t` enums, the `mode_context_t` struct (data passed to mode updates), and the common function prototypes (`_init`, `_update`, `_reset`) that each mode must implement.
+        *   `mode_*.c/h`: Implementation files for each specific mode (e.g., `mode_default.c`, `mode_euclidean.c`, `mode_chaos.c`). The `_update` function here contains the core rhythmic generation logic for that mode.
+    *   `src/util/`: Utility functions.
+        *   `delay.c/h`: Simple blocking delay functions (potentially less accurate, use SysTick `millis()` for timing).
+    *   `src/input_handler.c`: Manages user inputs. Reads button states (Tap PA0, Mode PA1), detects long presses/multi-presses for mode changes, handles short presses for calculation swap, checks external gate input (PB4), and triggers callbacks in `main.c` when tempo, op mode, or calc mode changes. Integrates `tap.c` and `ext_clock.c`.
+    *   `src/clock_manager.c`: Manages the core clock generation. Creates the base F1 clock pulse (Outputs 1A/1B) based on the current tempo (tapped or external). Creates the `mode_context_t` struct and calls the `_update()` function of the currently active operational mode.
+    *   `src/status_led.c`: Manages the Status LED (PA15) blinking pattern based on the current operational mode.
+
+*   **Key Configuration Files:**
+    *   `platformio.ini`: PlatformIO project configuration. Defines the target board (`blackpill_f401ce`), framework (`libopencm3`), upload method (`dfu`), library dependencies, and build flags. **Modify this if you change the target hardware.**
+    *   `src/main_constants.h`: Defines fundamental constants like pin assignments (via `io.h` enums), base timing values (BPM, intervals), and constants used across multiple modules.
+    *   `src/variables.h`: Contains *tunable* parameters like specific timing values for LEDs, debounce delays, cooldowns, and mode-specific parameters (like Chaos divisor defaults). Modify these to fine-tune behavior without changing core logic.
+
+*   **Code Style:**
+    *   Refer to `KODING.md` for detailed code style guidelines (K&R formatting, `snake_case` naming, Doxygen comments `/** */`, etc.).
+    *   **Maintain consistency** with the surrounding code when making changes.
+
+*   **Verification:**
+    *   After any significant changes, run the **Build** command/task to ensure the code compiles without errors. Pay attention to warnings.
+    *   Functional testing is **manual**: **Upload** the firmware to the board and carefully observe its behavior, testing the specific mode or feature you modified. There are no automated tests configured.
+
+*   **Additional Information:**
+    *   Consult `README.md` for a higher-level overview of features, hardware connections, and usage guide.
+    *   `KODING.md` contains further development notes and lists the exact build/upload commands.
