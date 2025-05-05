@@ -12,7 +12,7 @@ This work is licensed under a
 [cc-by-nc-sa-shield]: https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-lightgrey.svg
 
 ## Overview
-KRONO is a multimodal time control module for eurorack synthesizers, primarily implemented and tested on an **STM32F411CE** microcontroller (often found on "Black Pill" development boards, used here on the Krono PCB), though it may work on STM32F401CE with appropriate target changes. It provides tap tempo clock generation with multiple output modes and rhythmic variations, persisting its state across power cycles using internal Flash memory.
+KRONO is a multimodal time control module for eurorack synthesizers, primarily implemented and tested on an **STM32F411CE** microcontroller (often found on "Black Pill" development boards, used here on the Krono PCB), though it may work on STM32F401CE with appropriate target changes. It provides tap tempo clock generation with multiple output modes and rhythmic variations, persisting its state across power cycles using internal Flash memoryyyyyyyyyyyyy.
 
 ## Hardware Setup
 - **PA0:** Tap Input (Button to GND)
