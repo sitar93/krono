@@ -77,49 +77,49 @@ Uses PlatformIO.
 - **`KODING.md`**: Development notes, build/upload commands, and code style guidelines.
 - **`README.md`**: This file.
 
-## Guida Rapida all'Uso
-KRONO è progettato per essere il centro ritmico del tuo setup. Ecco come iniziare:
+## Quick Start Guide
+KRONO is designed to be the rhythmic center of your setup. Here's how to get started:
 
-1.  **Collegamento:**
-    *   Collega le uscite desiderate (Gruppo A: 1A-6A, Gruppo B: 1B-6B) ai moduli che vuoi controllare.
-    *   Collega un pulsante momentaneo (normalmente aperto, collegato a massa quando premuto) a PA0 (Tap).
-    *   Collega un altro pulsante momentaneo a PA1 (Mode/Swap).
-    *   **Opzionale:** Collega un segnale di clock esterno a PB3 (External Clock Input).
-    *   **Opzionale:** Collega un segnale di gate esterno a PB4 (External Gate Swap Input).
-    *   L'uscita LED PA15 mostra la modalità corrente con lampeggi periodici.
-    *   L'uscita LED PA3 lampeggia brevemente quando il tempo, la modalità o lo stato di swap cambiano.
-2.  **Accensione:** Dai alimentazione al modulo. KRONO caricherà automaticamente l'ultima modalità, tempo e stato di swap utilizzati per quella modalità dalla memoria Flash.
-3.  **Imposta il Tempo:**
-    *   **Tap Tempo:** Premi il pulsante Tap (PA0) a tempo con il ritmo desiderato. Dopo 3 tap validi (intervalli stabili), KRONO calcolerà il tempo medio e inizierà a generare clock. L'LED PA3 lampeggerà.
-    *   **External Clock:** Se un segnale di clock stabile è collegato a PB3, KRONO si sincronizzerà automaticamente a quel tempo dopo aver validato alcuni impulsi consecutivi, ignorando il Tap Tempo. L'LED PA3 lampeggerà.
-    *   Le uscite 1A e 1B generano sempre il clock principale (tapped o external).
-    *   *Nota: Il tempo (sia tapped che external) viene salvato solo quando si cambia/seleziona una modalità operativa.*
-4.  **Scegli la Modalità:**
-    *   Tieni premuto il pulsante Tap (PA0), quindi premi il pulsante Mode (PA1) una o più volte. Rilascia il pulsante Tap per confermare. Questo fa ciclare le modalità operative: `Default -> Euclidean -> Musical -> Probabilistic -> Sequential -> Swing -> Polyrhythm -> Logic -> Phasing -> Chaos -> Default`.
-    *   L'LED PA3 lampeggerà alla conferma.
-    *   *Questo salverà anche il tempo corrente e lo stato di swap corrente per la modalità selezionata.*
-    *   Per salvare lo stato corrente (tempo e swap) senza cambiare modalità, basta riselezionare la modalità corrente usando la stessa procedura.
-    *   L'LED di stato (PA15) ti mostrerà la modalità attiva lampeggiando periodicamente: 1 volta per Default, 2 per Euclidean, ..., 10 per Chaos.
-5.  **Esplora le Uscite:** (Il comportamento dipende dalla modalità attiva; ogni gruppo A/B ora ha 5 uscite variabili {2-6} oltre alla 1A/1B)
-    *   **Default Mode:** Moltiplicazioni/Divisioni dirette del tempo sulle uscite 2-6.
-    *   **Euclidean Mode:** Ritmi Euclidei basati su K/N predefiniti sulle uscite 2-6.
-    *   **Musical Mode:** Rapporti ritmici musicali predefiniti sulle uscite 2-6.
-    *   **Probabilistic Mode:** Trigger basati su probabilità predefinite per ciascuna uscita 2-6.
-    *   **Sequential Mode:** Clock basati su sequenze matematiche rispetto al clock principale sulle uscite 2-6.
-    *   **Swing Mode:** Applica percentuali di swing *diverse per ogni uscita* (2-6), ritardando i beat pari.
-    *   **Polyrhythm Mode:** Uscite 2-5 generano poliritmi X:Y. Uscita 6 è la *somma* (OR logico) delle uscite 2-5 del suo gruppo.
-    *   **Logic Mode:** Uscite 2-6 sono funzioni logiche (AND, OR, XOR, NAND, XNOR) degli ingressi Tap (PA0) e Mode (PA1).
-    *   **Phasing Mode:** Uscite 2-6 generano impulsi sfasati rispetto al clock principale (1A/1B), con sfasamenti diversi.
-    *   **Chaos Mode:** Uscite 2-6 generano pattern ritmici basati su mappe logistiche caotiche.
-6.  **Inverti i Gruppi (Calculation Swap):**
-    *   **Pulsante:** Premi brevemente *solo* il pulsante Mode/Swap (PA1).
-    *   **Gate:** Invia un segnale di gate HIGH a PB4.
-    *   Questo inverte le funzioni/pattern assegnate ai Gruppi A e B *all'interno della modalità corrente*.
-    *   L'LED PA3 lampeggerà.
-    *   *Nota: Lo stato di swap viene salvato solo quando si cambia/seleziona una modalità operativa.*
-7.  **Salvataggio:** Il salvataggio dello stato (tempo, modalità operativa e stato di swap per quella modalità) avviene automaticamente *solo* quando si seleziona una modalità operativa (tramite la procedura Tap Hold + Mode Press). Non avviene al cambio di tempo (esterno o tap) o al cambio di banco (swap).
+1.  **Connections:**
+    *   Connect the desired outputs (Group A: 1A-6A, Group B: 1B-6B) to the modules you want to control.
+    *   Connect a momentary button (normally open, connected to ground when pressed) to PA0 (Tap).
+    *   Connect another momentary button to PA1 (Mode/Swap).
+    *   **Optional:** Connect an external clock signal to PB3 (External Clock Input).
+    *   **Optional:** Connect an external gate signal to PB4 (External Gate Swap Input).
+    *   The PA15 LED output shows the current mode with periodic blinks.
+    *   The PA3 LED output flashes briefly when the tempo, mode, or swap state changes.
+2.  **Power Up:** Apply power to the module. KRONO will automatically load the last used mode, tempo, and swap state for that mode from Flash memory.
+3.  **Set the Tempo:**
+    *   **Tap Tempo:** Press the Tap button (PA0) in time with the desired rhythm. After 3 valid taps (stable intervals), KRONO will calculate the average tempo and start generating clocks. The PA3 LED will flash.
+    *   **External Clock:** If a stable clock signal is connected to PB3, KRONO will automatically sync to that tempo after validating a few consecutive pulses, ignoring Tap Tempo. The PA3 LED will flash.
+    *   Outputs 1A and 1B always generate the main clock (tapped or external).
+    *   *Note: The tempo (both tapped and external) is only saved when changing/selecting an operational mode.*
+4.  **Choose the Mode:**
+    *   Press and hold the Tap button (PA0), then press the Mode button (PA1) one or more times. Release the Tap button to confirm. This cycles through the operational modes: `Default -> Euclidean -> Musical -> Probabilistic -> Sequential -> Swing -> Polyrhythm -> Logic -> Phasing -> Chaos -> Default`.
+    *   The PA3 LED will flash upon confirmation.
+    *   *This will also save the current tempo and the current swap state for the selected mode.*
+    *   To save the current state (tempo and swap) without changing the mode, simply re-select the current mode using the same procedure.
+    *   The status LED (PA15) will show you the active mode by blinking periodically: 1 time for Default, 2 for Euclidean, ..., 10 for Chaos.
+5.  **Explore the Outputs:** (Behavior depends on the active mode; each group A/B now has 5 variable outputs {2-6} in addition to 1A/1B)
+    *   **Default Mode:** Direct tempo multiplications/divisions on outputs 2-6.
+    *   **Euclidean Mode:** Euclidean rhythms based on predefined K/N on outputs 2-6.
+    *   **Musical Mode:** Predefined musical rhythmic ratios on outputs 2-6.
+    *   **Probabilistic Mode:** Triggers based on predefined probabilities for each output 2-6.
+    *   **Sequential Mode:** Clocks based on mathematical sequences relative to the main clock on outputs 2-6.
+    *   **Swing Mode:** Applies *different swing percentages to each output* (2-6), delaying the even beats.
+    *   **Polyrhythm Mode:** Outputs 2-5 generate X:Y polyrhythms. Output 6 is the *sum* (logical OR) of the outputs 2-5 in its group.
+    *   **Logic Mode:** Outputs 2-6 are logic functions (AND, OR, XOR, NAND, XNOR) of the Tap (PA0) and Mode (PA1) inputs.
+    *   **Phasing Mode:** Outputs 2-6 generate pulses phased relative to the main clock (1A/1B), with different phase shifts.
+    *   **Chaos Mode:** Outputs 2-6 generate rhythmic patterns based on chaotic logistic maps.
+6.  **Swap Groups (Calculation Swap):**
+    *   **Button:** Briefly press *only* the Mode/Swap button (PA1).
+    *   **Gate:** Send a HIGH gate signal to PB4.
+    *   This inverts the functions/patterns assigned to Groups A and B *within the current mode*.
+    *   The PA3 LED will flash.
+    *   *Note: The swap state is only saved when changing/selecting an operational mode.*
+7.  **Saving:** Saving the state (tempo, operational mode, and swap state for that mode) occurs automatically *only* when selecting an operational mode (via the Tap Hold + Mode Press procedure). It does not occur on tempo changes (external or tap) or bank changes (swap).
 
-## Core Functionality (Dettagli Tecnici)
+## Core Functionality (Technical Details)
 ### Timing and Tempo
 - **System Tick:** 1ms tick via SysTick (`sys_tick_handler` in `main.c`). Provides `millis()`.
 - **Tap Tempo:** Handled by `input_handler.c`.
