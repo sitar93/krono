@@ -1,0 +1,280 @@
+=== NEW MODES FOR KRONO ===
+
+[ORDER]
+1. MODE_DEFAULT       (1 blink)
+2. MODE_EUCLIDEAN     (2 blinks)
+3. MODE_MUSICAL       (3 blinks)
+4. MODE_PROBABILISTIC (4 blinks)
+5. MODE_SEQUENTIAL    (5 blinks)
+6. MODE_SWING         (6 blinks)
+7. MODE_POLYRHYTHM    (7 blinks)
+8. MODE_LOGIC         (8 blinks)
+9. MODE_PHASING       (9 blinks)
+10. MODE_CHAOS        (10 blinks)
+11. MODE_METAMODAL    (11 blinks)
+12. MODE_RESONANCE    (12 blinks)
+13. MODE_HOLOGRAPHIC  (13 blinks)
+14. MODE_DNA          (14 blinks)
+15. MODE_QUANTUM      (15 blinks)
+16. MODE_PSYCHEDELIC  (16 blinks)
+17. MODE_RETRO        (17 blinks)
+18. MODE_MICROTIMING  (18 blinks)
+19. MODE_ODDEVEN      (19 blinks)
+20. MODE_RANDOM       (20 blinks)
+21. MODE_SEQUENCER    (21 blinks)
+
+
+--- 11. META-MODAL MODE ---
+
+Concept: Mode that controls other modes
+Implementation:
+
+    Group A: Selects base mode (2A=Euclidean, 3A=Musical...)
+
+    Group B: Time distortion parameters (glitch, stretch)
+
+    Automation:
+    ```c
+    if(tap_count % 7 == 0) randomize_mode_combination();
+    ```
+
+
+--- 12. PHYSICAL RESONANCE MODE ---
+
+Concept: Physical model of virtual strings/percussions
+Implementation:
+```c
+// Discretized wave equation
+u[i][t+1] = 2*u[i][t] - u[i][t-1] + c²*(u[i+1][t] - 2*u[i][t] + u[i-1][t])
+```
+    Group A: Pulse excitation (pickup position)
+
+    Group B: Harmonic resonance (modal analysis)
+
+    Parameters: Virtual string length mapped to PA1 potentiometer
+
+
+--- 13. HOLOGRAPHIC MODE ---
+
+Concept: Patterns based on short-time Fourier transform
+Implementation:
+
+    Group A: Low-frequency bands (0-50Hz)
+
+    Group B: High-frequency components (>1kHz)
+
+    DSP Optimized:
+    ```c
+    arm_rfft_fast_instance_f32 fft_handle;
+    arm_rfft_fast_init_f32(&fft_handle, 512);
+    ```
+
+
+--- 14. DNA MODE ---
+
+Concept: Genetic algorithms for pattern evolution
+Implementation:
+
+    Group A: Current genome (5x16bit)
+
+    Group B: Population fitness (natural selection)
+
+    Crossover:
+    ```c
+    child = (parentA & mask) | (parentB & ~mask);
+    ```
+
+    Mutation Rate: Controlled by tap tempo interval
+
+
+--- 15. QUANTUM MODE ---
+
+Concept: Superposition of quantum states
+Implementation:
+```c
+// Qubit simulation
+typedef struct {
+  float complex up;
+  float complex down;
+} Qubit;
+
+void hadamard(Qubit* q) {
+  // Matrix multiplication
+}
+```
+    Group A: X-axis measurement (Pauli-X)
+
+    Group B: Entanglement between channels (2-6)
+
+    Collapse: Determined by analog noise on PA4
+
+
+--- 16. PSYCHEDELIC MODE ---
+
+Concept: Synchronization of biological rhythms
+Implementation:
+
+    Group A: Simulated heartbeat (sinusoidal pacemaker)
+
+    Group B: Brainwaves (FFT of pink noise + theta peaks)
+
+    BIO Feedback: Use ADC on PA4 for capacitive input
+
+
+--- 17. RETROCOMPUTING MODE ---
+
+Concept: Vintage CPU emulation for clock generation
+Implementation:
+```c
+// Z80 VM core
+void z80_emulate() {
+  switch(opcode) {
+    case 0x3E: // LD A,n
+      a = next_byte();
+      pc += 2;
+      break;
+    //...
+  }
+}
+```
+    Group A: CPU /WR signal
+
+    Group B: /MREQ signal
+
+    Swap Mode: Toggles between Z80/6502/6809
+
+
+--- 18. MICROTIMING MODE ---
+
+1. Asymmetric Swing and Microtiming
+
+    In traditional quantization, notes strictly align to a time grid (e.g., 16th note grid at 120 BPM).
+
+    Dilla introduces non-uniform timing deviations: some notes are early, others late, creating a "drunk" feel (Drunk Swing).
+
+    Mathematical model:
+
+        If Tn is the expected time for a note on the quantized grid,
+
+        Dilla introduces an offset function ΔTn that follows a non-uniform distribution:
+        Tn′ = Tn + ΔTn
+
+        ΔTn can be a random function (within certain limits) or follow predetermined patterns.
+
+2. Non-Uniformity in Velocity (Dynamics)
+
+    Note intensity (MIDI velocity) varies irregularly, instead of following a rigid pattern.
+
+    In mathematical terms:
+
+        If Vn is the standard velocity,
+
+        Dilla introduces a variation ΔVn, for example:
+        Vn′ = Vn * (1 + ΔVn)
+
+        Where ΔVn can be a random function or based on accentuation rules.
+
+3. Interplay between Kick, Snare, and Hi-Hat
+
+    Traditionally, kick and snare follow regular patterns (e.g., backbeat with snare on 2 and 4).
+
+    Dilla breaks this regularity:
+
+        Kick slightly delayed, Snare slightly early, Hi-Hat out of phase with the grid.
+
+        Mathematical model:
+        Tkick′ = Tkick + ΔTkick, Tsnare′ = Tsnare + ΔTsnare, Thh′ = Thh + ΔThh
+
+        With ΔTkick > 0 and ΔTsnare < 0, creating rhythmic tension.
+
+4. Local Swing Variations
+
+    Classic jazz and hip-hop swing involves a fixed ratio (e.g., 2:1 for shuffle).
+
+    Dilla dynamically varies this ratio during the beat.
+
+    Mathematical model:
+
+        If Rswing is the ratio between swung notes (e.g., 2:1),
+
+        Dilla applies non-uniform variations ΔRswing, making the swing more fluid and unpredictable:
+        Rswing′ = Rswing + ΔRswing
+
+To implement a "Dilla-style beat generator", you should:
+
+    Define a base grid (e.g., 16th note grid).
+
+    Apply temporal offsets ΔTn non-uniformly, with a distribution reflecting his swing.
+
+    Vary velocities Vn′ dynamically to simulate human feel.
+
+    Manage the relationships between Kick, Snare, and Hi-Hat to create the "drunk" groove.
+
+    Modulate the swing ratio Rswing′ across different sections of the beat.
+
+
+--- 19. EVEN/ODD ---
+even and odd divisions on groups A and B:
+
+1   1
+2   3
+4   5
+8   7
+16  9
+64  24
+
+
+--- 20. RANDOM WALK MODE ---
+• Group A: Markov Chain (3 hidden states)
+• Group B: Brownian motion (±5% interval variation)
+• Parameters:
+  float transition_matrix[3][3] = {
+    {0.6,0.3,0.1},
+    {0.3,0.4,0.3},
+    {0.1,0.3,0.6}
+  };
+
+--- 21. SEQUENCER MODE ---
+Initial State
+
+    All outputs 2A-6A and 2B-6B must be off on startup.
+
+Basic Operation
+
+    Sequence Advancement:
+
+        The sequence advances in sync with the input clock (1A/1B).
+
+        The sequence length is fixed at 16 steps (repeats cyclically).
+
+    Step Programming:
+
+        While advancing, pressing PA1 (Mode/Swap) activates/deactivates the current step:
+
+            If off → on (trigger/gate active).
+
+            If on → off.
+
+        Pressing PA1 must not activate the "Calculation Swap" function in this mode.
+
+    Trigger/Gate Outputs (2A and 2B):
+
+        Send a trigger/gate (1ms) only on steps activated by the user.
+
+    Positive/Negative Shift Outputs:
+
+        Outputs 3A-6A: Report positive shifts (+1, +2, +3, +4 steps from the current position).
+
+        Outputs 3B-6B: Report negative shifts (-1, -2, -3, -4 steps from the current position).
+
+    Pattern Storage:
+
+        The entered pattern must remain stored in RAM. 
+        *(Translator's Note: Original text mentions RAM persistence after power off, which is unlikely. This likely means stored in RAM during operation, or should be stored in Flash/BKP for true persistence).*
+
+Additional Notes
+
+    The activation logic for PA1 must be debounced to avoid accidental registrations.
+
+    Shifts (±1…±4) must be calculated circularly (e.g., step 15 + 3 = step 2).
+

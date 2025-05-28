@@ -1,0 +1,35 @@
+Install Platformio in a Python virtual environment (recommended)
+```bash
+# Create a virtual environment
+python3 -m venv ~/platformio_venv
+
+# Activate the environment
+source ~/platformio_venv/bin/activate
+
+# Install PlatformIO
+pip install platformio
+```
+
+3. Add the virtual environment to PATH (optional)
+
+Open ~/.bashrc:
+```bash
+nano ~/.bashrc
+```
+
+Add this line at the end:
+```bash
+export PATH="$HOME/platformio_venv/bin:$PATH"
+```
+
+Save with CTRL+O > Exit with CTRL+X.
+
+4. Apply the changes
+```bash
+source ~/.bashrc
+```
+
+5. Verify
+```bash
+platformio --version  # You should see "PlatformIO Core X.Y.Z"
+```

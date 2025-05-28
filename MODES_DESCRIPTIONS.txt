@@ -1,0 +1,61 @@
+     1	Detailed KRONO Mode Descriptions
+     2	
+     3	This file describes the operation of each mode implemented in the KRONO module.
+     4	
+     5	--- Implemented Modes ---
+     6	
+     7	1. MODE_DEFAULT (Multiplications/Divisions)
+     8	   - Group A: Outputs clocks at multiples of the base tempo (x2, x3, x4, x5, x6 on outputs 2A-6A).
+     9	   - Group B: Outputs clocks at divisions of the base tempo (/2, /3, /4, /5, /6 on outputs 2B-6B).
+    10	   - Swap (PA1): Inverts the functions between Group A and Group B (A becomes Divisions, B becomes Multiplications).
+    11	
+    12	2. MODE_EUCLIDEAN (Euclidean Rhythms)
+    13	   - Group A: Generates Euclidean rhythms based on a predefined set of steps (K) and total length (N) on outputs 2A-6A.
+    14	   - Group B: Generates Euclidean rhythms based on *another* predefined set of K/N on outputs 2B-6B.
+    15	   - Swap (PA1): Swaps the K/N parameter sets between Group A and Group B.
+    16	
+    17	3. MODE_MUSICAL (Musical Ratios)
+    18	   - Generates clocks based on rhythmic ratios (fractions of the base tempo) on outputs 2-6 of each group.
+    19	   - Group A (Default): Outputs 2A-6A with ratios 1/6, 1/8, 8/1, 6/5, 4/5.
+    20	   - Group B (Default): Outputs 2B-6B with ratios 1/7, 3/4, 5/3, 7/2, 9/4.
+    21	   - Swap (PA1): Swaps the ratio sets between Group A and Group B.
+    22	
+    23	4. MODE_PROBABILISTIC (Trigger Probabilities)
+    24	   - Group A: Each output (2A-6A) has a predefined increasing probability (10% to 50%) of generating a trigger on each base clock (F1).
+    25	   - Group B: Each output (2B-6B) has a predefined exponentially decreasing probability (50% to ~3%) of generating a trigger on each base clock (F1).
+    26	   - Swap (PA1): Inverts the probability curves between Group A and Group B (A becomes decreasing, B increasing).
+    27	
+    28	5. MODE_SEQUENTIAL (Mathematical Sequences)
+    29	   - Group A: Outputs triggers based on a mathematical sequence (Default: Fibonacci {1, 2, 3, 5, 8}) applied to the base clock counter on outputs 2A-6A.
+    30	   - Group B: Outputs triggers based on another mathematical sequence (Default: Primes {2, 3, 5, 7, 11}) on outputs 2B-6B.
+    31	   - Swap (PA1): Swaps the sequences used between Group A (becomes Lucas {2, 1, 3, 4, 7}) and Group B (becomes Composites {4, 6, 8, 9, 10}).
+    32	
+    33	6. MODE_SWING (Swing/Shuffle per Output)
+    34	   - Group A: Applies a set of swing percentages *unique to each output* (2A-6A), delaying the even beats.
+    35	   - Group B: Applies a *different* set of unique swing percentages to each output (2B-6B), delaying the even beats.
+    36	   - Swap (PA1): Swaps the sets of applied swing percentages between Group A and Group B.
+    37	
+    38	7. MODE_POLYRHYTHM (X:Y Polyrhythms and Sum)
+    39	   - Group A: Outputs 2A-5A generate X:Y polyrhythms (Default: 3:2, 5:3, 7:4, 9:5). Output 6A is the sum (logical OR) of the triggers from 2A-5A.
+    40	   - Group B: Outputs 2B-5B generate *other* X:Y polyrhythms (Default: 4:3, 6:5, 8:7, 10:9). Output 6B is the sum (logical OR) of the triggers from 2B-5B.
+    41	   - Swap (PA1): Swaps the sets of X:Y polyrhythmic ratios between Group A and Group B.
+    42	
+    43	8. MODE_LOGIC (Logic Gates)
+    44	   - Concept: Logically combines the calculated outputs of the Default mode.
+    45	   - Group A: Outputs the XOR result between the corresponding calculated outputs (2-6) of Default mode for A and B (e.g., 2A_logic = 2A_default XOR 2B_default).
+    46	   - Group B: Outputs the NOR result between the corresponding calculated outputs (2-6) of Default mode for A and B (e.g., 2B_logic = NOT (2A_default OR 2B_default)).
+    47	   - Swap (PA1): Inverts the logic gates between the groups (A becomes NOR, B becomes XOR).
+    48	
+    49	9. MODE_PHASING (Phasing Clocks & Derived Outputs)
+    50	   - Concept: Group B has a slightly different frequency than Group A.
+    51	   - Group A (Outputs 2A-6A): Output 2A follows the base tempo. Outputs 3A-6A generate derived clocks (x2, /2, x3, /3) from the base tempo.
+    52	   - Group B (Outputs 2B-6B): Output 2B follows the deviated base tempo. Outputs 3B-6B generate derived clocks (x2, /2, x3, /3) from the *deviated* base tempo.
+    53	   - Swap (PA1): Cycles through 3 levels of frequency deviation for Group B (small, medium, large).
+    54	
+    55	10. MODE_CHAOS (Lorenz Threshold Crossing)
+    56	    - Concept: Generates triggers based on the crossing of thresholds by the variables of the Lorenz chaotic system.
+    57	    - Group A (Outputs 2A-6A): Triggers based on the crossing of predefined thresholds (X_THRESHOLDS) by the X variable of the Lorenz system.
+    58	    - Group B (Outputs 2B-6B): Triggers based on the crossing of predefined thresholds (YZ_THRESHOLDS) by the Y or Z variables (selected by YZ_USE_Y).
+    59	    - Divided Triggers: A trigger is output only every 'N' threshold crossings. The value of 'N' (chaos_current_divisor) is shared among all outputs 2-6.
+    60	    - Swap (PA1): Decrements the divisor 'N' for all outputs (from CHAOS_DIVISOR_DEFAULT down to CHAOS_DIVISOR_MIN with step CHAOS_DIVISOR_STEP), wrapping back to default if the minimum is reached. The divisor state is saved/loaded.
+    61	
