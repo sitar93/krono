@@ -129,10 +129,29 @@ void mode_chaos_reset(void) {
 void mode_chaos_update(const mode_context_t *context) {
     uint32_t current_ms = millis();
 
-    // --- Adjust divisor on PA1 press --- 
-    if (context->calc_mode_changed) { // Check if PA1 was pressed
-        if (chaos_current_divisor <= CHAOS_DIVISOR_MIN) { // If at or below minimum
-             chaos_current_divisor = CHAOS_DIVISOR_DEFAULT; // Reset to default
+    // 1. Turn off outputs whose pulse duration has expired FIRST
+    // This ensures that pulse timing is as accurate as possible, minimizing jitter
+    // from calculations below.
+    for (jack_output_t i = JACK_OUT_1A; i <= JACK_OUT_6B; ++i) {
+        bool is_group_b_output = (i >= JACK_OUT_1B && i <= JACK_OUT_6B);
+        // Skip outputs not managed by chaos mode (e.g., if iterating through all possible outputs)
+        // Chaos mode specifically manages 2A-6A and 2B-6B.
+        // F1 outputs (1A/1B) are managed by clock_manager.
+        if (i == JACK_OUT_1A || i == JACK_OUT_1B) continue; 
+        if (i > JACK_OUT_6A && !is_group_b_output) continue; // Skip invalid enum gaps
+
+        if (trigger_start_time_ms[i] != 0 && (current_ms - trigger_start_time_ms[i] >= DEFAULT_PULSE_DURATION_MS)) {
+            set_output(i, false);
+            trigger_start_time_ms[i] = 0;
+        }
+    }
+
+    // --- Adjust divisor on PA1 press (Calc Mode Swap button in this mode) ---
+    // This is checked *after* pulse turn-off to ensure divisor changes don't affect
+    // the current cycle's pulse-off logic if it was already triggered.
+    if (context->calc_mode_changed) { // True if PA1 was pressed (calc mode swap event)
+        if (chaos_current_divisor <= CHAOS_DIVISOR_MIN) { // If at or below minimum, cycle to default
+             chaos_current_divisor = CHAOS_DIVISOR_DEFAULT;
         } else {
             chaos_current_divisor -= CHAOS_DIVISOR_STEP;
             // Ensure it doesn't go below min after decrementing
@@ -140,27 +159,22 @@ void mode_chaos_update(const mode_context_t *context) {
                  chaos_current_divisor = CHAOS_DIVISOR_MIN;
             }
         } 
-    }
-
-    // 1. Turn off outputs whose pulse duration has expired
-    for (jack_output_t i = JACK_OUT_1A; i <= JACK_OUT_6B; ++i) {
-        bool is_group_b_output = (i >= JACK_OUT_1B && i <= JACK_OUT_6B);
-        if (i > JACK_OUT_6A && !is_group_b_output) continue;
-        if (trigger_start_time_ms[i] != 0 && (current_ms - trigger_start_time_ms[i] >= DEFAULT_PULSE_DURATION_MS)) {
-            set_output(i, false);
-            trigger_start_time_ms[i] = 0;
-        }
+        // The change in divisor will affect the *next* trigger event.
     }
 
     // 2. Run Lorenz simulation steps
     uint32_t elapsed_ms = context->ms_since_last_call;
-    if (elapsed_ms == 0) elapsed_ms = 1;
-    if (elapsed_ms > 100) elapsed_ms = 100;
+    if (elapsed_ms == 0) elapsed_ms = 1; // Ensure at least one step if called very rapidly
+    if (elapsed_ms > 100) elapsed_ms = 100; // Cap elapsed time to prevent excessive steps
+    
+    // Calculate number of simulation steps based on elapsed time and Lorenz DT
     int num_steps = (int)((float)elapsed_ms / (LORENZ_DT * 1000.0f));
-    num_steps = num_steps > 0 ? num_steps : 1;
+    num_steps = num_steps > 0 ? num_steps : 1; // Ensure at least one simulation step
+    
     prev_lorenz_x = lorenz_x;
     prev_lorenz_y = lorenz_y;
     prev_lorenz_z = lorenz_z;
+    
     for (int i = 0; i < num_steps; ++i) {
         float dx = LORENZ_SIGMA * (lorenz_y - lorenz_x);
         float dy = lorenz_x * (LORENZ_RHO - lorenz_z) - lorenz_y;
@@ -170,8 +184,8 @@ void mode_chaos_update(const mode_context_t *context) {
         lorenz_z += dz * LORENZ_DT;
     }
 
-    // 3. Check for threshold crossings and trigger outputs
-    // Threshold assignments are now FIXED: Group A=X, Group B=Y/Z
+    // 3. Check for threshold crossings and trigger new outputs
+    // Threshold assignments are FIXED: Group A=X, Group B=Y/Z
 
     // --- Group A Triggering (Outputs 2A-6A) --- 
     for (int i = 0; i < MODE_CHAOS_NUM_VAR_OUTPUTS; ++i) {

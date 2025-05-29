@@ -4,7 +4,7 @@ import re
 def get_version():
     """Extracts version from the last non-empty line in changelog.txt, preserving the 'v' prefix"""
     try:
-        with open("changelog.txt", "r") as f:
+        with open("CHANGELOG.txt", "r") as f:
             # Get last non-empty line
             lines = [line.strip() for line in f.readlines() if line.strip()]
             last_line = lines[-1] if lines else ""

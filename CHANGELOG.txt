@@ -1,3 +1,4 @@
 v1.0.0 - original release
 v1.1.0 - better mode change debouncing and internal tempo range extension
 v1.2.0 - external clock copy fix and external clock phase fix
+v1.2.1 - save state logic change, mode swing swap edit, bug fix

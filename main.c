@@ -192,7 +192,7 @@ static void system_init(void) {
     if (!persistence_load_state(&current_state)) {
         // If loading failed critically (shouldn't happen with current implementation)
         // Re-initialize to absolute defaults (though load_state handles defaults)
-        current_state.magic_number = KRONO_STATE_MAGIC_NUMBER;
+        current_state.magic_number = PERSISTENCE_MAGIC_NUMBER;
         current_state.op_mode = MODE_DEFAULT;
         current_state.tempo_interval = DEFAULT_TEMPO_INTERVAL;
         for(int i=0; i<NUM_OPERATIONAL_MODES; ++i) {
