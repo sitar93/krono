@@ -1,0 +1,1816 @@
+<div class="krono-updater-container">
+    <div class="krono-updater">
+        <h2>KRONO UPDATER</h2>
+        <div class="browser-compatibility">
+            <h3>Browser Compatibility</h3>
+            <div class="compatibility-grid">
+                <div class="supported-browsers">
+                    <h4>Supported</h4>
+                    <ul>
+                        <li><strong>Chrome 61+</strong> (Recommended)</li>
+                        <li><strong>Microsoft Edge 79+</strong> (Chromium-based)</li>
+                        <li><strong>Opera 48+</strong></li>
+                        <li><strong>Chrome for Android</strong> (with USB OTG)</li>
+                    </ul>
+                </div>
+                <div class="unsupported-browsers">
+                    <h4>Not Supported</h4>
+                    <ul>
+                        <li><strong>Firefox</strong> (all versions)</li>
+                        <li><strong>Safari</strong> (all versions)</li>
+                        <li><strong>Internet Explorer</strong></li>
+                        <li><strong>iOS devices</strong> (iPhone/iPad)</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="compatibility-note">
+                <strong>Note:</strong> This updater requires WebUSB API support and HTTPS connection. <br>Chrome is recommended for best compatibility.
+            </div>
+        </div>
+        <div id="usbStatus"></div>
+        <div class="windows-section-wrapper">
+            <div id="windowsSetup" class="windows-setup accordion-section closed">
+                <div class="accordion-header" onclick="toggleAccordion('windowsDrivers')">
+                    <h3>
+                        Is this your first time updating your KRONO?<br>
+                        You might need to install the drivers first!<br>
+                        <small style="font-weight: normal;">This applies to Windows users only.<br>If you are using the updater on another operating system, skip this steps.</small>
+                    </h3>
+                    <div class="accordion-indicator">
+                        <span class="click-hint">SHOW</span>
+                        <span class="accordion-arrow" id="windowsDrivers-arrow">▼</span>
+                    </div>
+                </div>
+                <div class="accordion-content" id="windowsDrivers-content" style="display:none;">
+                    <div class="setup-steps">
+                        <div class="setup-step">
+                            <div class="step-number">1</div>
+                            <div class="step-content">
+                                <strong><a href="https://zadig.akeo.ie/" target="_blank" class="download-link-title">Download Zadig from the official website</a></strong><br>
+                                <span class="step-note">Free tool to install USB drivers on Windows</span>
+                            </div>
+                        </div>
+                        <div class="setup-step">
+                            <div class="step-number">2</div>
+                            <div class="step-content">
+                                <strong>Connect KRONO in DFU mode</strong><br>
+                                <span class="step-note">
+                                    • Connect KRONO to computer via USB-C cable on the back. Use a USB-C cable that can send data signals<br>
+                                    • On the back of the module there are two tiny buttons: hold BOOT button (left), press RESET button (right) once, then release both buttons
+                                </span>
+                            </div>
+                        </div>
+                        <div class="setup-step">
+                            <div class="step-number">3</div>
+                            <div class="step-content">
+                                <strong>Run Zadig as Administrator</strong><br>
+                                <span class="step-note">Right-click Zadig → "Run as administrator"</span>
+                            </div>
+                        </div>
+                        <div class="setup-step">
+                            <div class="step-number">4</div>
+                            <div class="step-content">
+                                <strong>Configure Zadig</strong><br>
+                                <span class="step-note">
+                                    • Click "Options" → "List All Devices"<br>
+                                    • Select your STM32 DFU device - usually the name is STM32 BOOTLOADER<br>
+                                    • Ensure "WinUSB" is selected as driver<br>
+                                    • Click "Replace Driver" or "Install Driver"<br>
+                                    • Wait for the message confirming driver installation and then close Zadig
+                                </span>
+                            </div>
+                        </div>
+                        <div class="setup-step">
+                            <div class="step-number">5</div>
+                            <div class="step-content">
+                                <strong>Close Zadig</strong><br>
+                                <span class="step-note">
+                                    Close Zadig and disconnect KRONO from the USB
+                                </span>
+                            </div>
+                        </div>
+                        <div class="setup-warning">
+                            <strong>Important:</strong> You only need to do this once per device. After installing WinUSB driver, the updater will work normally.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="step">
+            <strong>1. Download Latest Firmware</strong><br>
+            <span class="step-subtitle">
+                Get the latest firmware from GitHub repository.<br>
+                <strong>Important:</strong> You must download the firmware file before clicking START.<br>
+                If you click START first, you'll need to refresh the page and start over.
+            </span>
+        </div>
+            <div class="button-container">
+                <button id="fetchFirmwareBtn">DOWNLOAD LATEST FIRMWARE</button>
+            </div>
+            <div class="step">
+                <strong>2. Prepare KRONO</strong><br>
+                <span class="step-subtitle"></span>
+                <div class="step-list">
+                    <ol>
+                        <li>Connect KRONO to computer via USB-C cable on the back. Use a USB-C cable that can send data signals.</li>
+                        <li>On the back of the module there are two tiny buttons: hold BOOT button (left), press RESET button (right) once, then release both buttons.</li>
+                    </ol>
+                </div>
+            </div>
+            <div class="step">
+                <strong>3. Initialize the programmer</strong><br>
+                <span class="step-subtitle">Click the button below, then authorize USB access by clicking "Connect" when prompted. Check the log below to see if the connection was successful - you should see: "STM32F411 connected and ready for firmware update"</span>
+            </div>
+            <div class="button-container">
+                <button id="initBtn">START</button>
+            </div>
+            <div class="step">
+                <strong>4. Upload Firmware</strong><br>
+                <span class="step-subtitle">Select the downloaded firmware file or choose another firmware from <a href="https://github.com/sitar93/krono/releases" target="_blank">GitHub releases</a>. After selecting the file, click the "PROGRAM" button. If everything goes well, you will see "Programming Complete" in the log after the update - then you can disconnect KRONO.</span>
+            </div>
+            <div id="updateSection" style="display:block;">
+                <label for="fileInput" class="file-label">Select firmware file (.bin, .hex or .dfu):</label>
+                <input type="file" id="fileInput" accept=".bin,.hex,.dfu" class="file-input">
+                <div class="button-container">
+                    <button id="flashBtn" disabled>PROGRAM</button>
+                </div>
+                <div id="progressContainer" style="margin-top:20px;display:none;">
+                    <div id="progressBar"></div>
+                    <div id="progressText">0%</div>
+                </div>
+            </div>
+        </div>
+        <div id="statusBox">
+            <div id="statusMessage">Ready to connect</div>
+            <div id="deviceDetails"></div>
+        </div>
+        <div class="notes-section">
+            <h3>Notes</h3>
+            <ul class="notes-list">
+                <li>The module does not need to be powered during programming. In that case, you will only see the red TAP LED blink upon successful programming. If you want to power the module during programming, that's fine - it has been designed for that scenario as well.</li>
+                <li>If something goes wrong during programming, try refreshing the page and following the procedure again from the beginning.</li>
+                <li>This programmer was designed to simplify the procedure for less experienced users and requires no installation. However, if you encounter compatibility issues, you can always update KRONO using ST's proprietary tool - <a href="https://www.st.com/en/development-tools/stm32cubeprog.html" target="_blank" class="notes-link">STM32CubeProgrammer</a>.</li>
+                <li>If you are programming from Chrome mobile via OTG for the first time, it may be necessary to initialize the drivers first with Zadig from a desktop computer. Follow the Zadig procedure visible from desktop.</li>
+            </ul>
+        </div>
+    </div>
+</div>
+<script>
+// STM32 DFU implementation following official AN3156 specification
+class STM32DFU {
+    constructor() {
+        this.device = null;
+        this.interface = null;
+        // STM32F411 settings
+        this.transferSize = 2048;
+        this.maxRetries = 5;
+        this.statusCheckDelay = 35; // Match CubeProgrammer timing ~30-35ms
+        this.maxStatusChecks = 50;
+        this.chunkDelay = 50; 
+        // STM32F411 specific flash address
+        this.flashAddress = 0x08000000;
+        this.isDfuFile = false;
+        // DFU states from AN3156
+        this.DFU_STATE = {
+            dfuIDLE: 2,
+            dfuDNLOAD_SYNC: 3,
+            dfuDNBUSY: 4,
+            dfuDNLOAD_IDLE: 5,
+            dfuMANIFEST_SYNC: 6,
+            dfuMANIFEST: 7,
+            dfuMANIFEST_WAIT_RESET: 8,
+            dfuUPLOAD_IDLE: 9,
+            dfuERROR: 10
+        };
+        // DFU status codes
+        this.DFU_STATUS = {
+            OK: 0x00,
+            errTARGET: 0x01,
+            errFILE: 0x02,
+            errWRITE: 0x03,
+            errERASE: 0x04,
+            errCHECK_ERASED: 0x05,
+            errPROG: 0x06,
+            errVERIFY: 0x07,
+            errADDRESS: 0x08,
+            errNOTDONE: 0x09,
+            errFIRMWARE: 0x0A,
+            errVENDOR: 0x0B,
+            errUSBR: 0x0C,
+            errPOR: 0x0D,
+            errUNKNOWN: 0x0E,
+            errSTALLEDPKT: 0x0F
+        };
+    }
+    async connect() {
+        console.log("STM32DFU: Starting connection...");
+        // Request STM32 DFU device
+        this.device = await navigator.usb.requestDevice({
+            filters: [
+                { vendorId: 0x0483, productId: 0xDF11 }, // STM32 DFU bootloader - primary
+                { vendorId: 0x0483 }, // STM32 generic
+                { classCode: 0xFE, subclassCode: 0x01 }, // DFU class
+            ]
+        });
+        console.log("STM32DFU: Device selected, opening...", this.device);
+        await this.device.open();
+        if (this.device.configuration === null) {
+            console.log("STM32DFU: Selecting configuration 1...");
+            await this.device.selectConfiguration(1); 
+        }
+        // Find DFU interface
+        console.log("STM32DFU: Looking for DFU interface...");
+        for (const intf of this.device.configuration.interfaces) {
+            console.log(`STM32DFU: Checking interface ${intf.interfaceNumber}, class: ${intf.alternates[0].interfaceClass}`);
+            if (intf.alternates[0].interfaceClass === 0xFE) {
+                this.interface = intf; 
+                break;
+            }
+        }
+        if (!this.interface) {
+            throw new Error("No DFU interface found");
+        }
+        console.log(`STM32DFU: Using interface ${this.interface.interfaceNumber}`);
+        await this.device.claimInterface(this.interface.interfaceNumber); 
+        // Clear DFU state to ensure clean state
+        await this.clearDFUState();
+        // Get device descriptor info for better compatibility
+        await this.getDeviceInfo();
+        console.log(`STM32DFU: Connection successful, using transferSize: ${this.transferSize}`);
+        return this; 
+    }
+    async getDeviceInfo() {
+        try {
+            // Try to get functional descriptor for better transfer size
+            const result = await this.device.controlTransferIn({
+                requestType: 'standard',
+                recipient: 'interface',
+                request: 6, // GET_DESCRIPTOR
+                value: 0x2100, // DFU functional descriptor
+                index: this.interface.interfaceNumber
+            }, 9);
+            if (result.data && result.data.byteLength >= 9) {
+                const desc = new Uint8Array(result.data.buffer);
+                const transferSize = desc[5] | (desc[6] << 8);
+                if (transferSize > 0 && transferSize <= 4096) {
+                    this.transferSize = transferSize;
+                    console.log(`STM32DFU: Device reports transfer size: ${transferSize}`);
+                }
+            }
+        } catch (e) {
+            console.log("STM32DFU: Could not get device descriptor, using default transfer size");
+        }
+    }
+    async clearDFUState() {
+        let attempts = 0;
+        const maxAttempts = 3; // Reduced attempts for faster recovery
+        while (attempts < maxAttempts) {
+            try {
+                // Clear status first
+                await this.device.controlTransferOut({
+                    requestType: 'class',
+                    recipient: 'interface',
+                    request: 4, // DFU_CLRSTATUS
+                    value: 0,
+                    index: this.interface.interfaceNumber
+                }, new ArrayBuffer(0));
+                await new Promise(resolve => setTimeout(resolve, 50));
+                // Send abort to ensure we're in idle state
+                await this.device.controlTransferOut({
+                    requestType: 'class',
+                    recipient: 'interface',
+                    request: 6, // DFU_ABORT
+                    value: 0,
+                    index: this.interface.interfaceNumber
+                }, new ArrayBuffer(0));
+                await new Promise(resolve => setTimeout(resolve, 100));
+                const status = await this.getStatus();
+                if (status && status.state === this.DFU_STATE.dfuIDLE) {
+                    console.log("STM32DFU: Device cleared to idle state");
+                    return;
+                } else if (status && status.state === this.DFU_STATE.dfuDNLOAD_IDLE) {
+                    console.log("STM32DFU: Device in download idle state");
+                    return;
+                }
+                attempts++;
+                if (attempts < maxAttempts) {
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                }
+            } catch (e) {
+                console.warn(`STM32DFU: Clear state attempt ${attempts + 1} failed:`, e.message);
+                attempts++;
+                if (attempts < maxAttempts) {
+                    await new Promise(resolve => setTimeout(resolve, 200));
+                }
+            }
+        }
+        console.warn("STM32DFU: Could not clear DFU state completely");
+    }
+    async getStatus() {
+        try {
+            const result = await this.device.controlTransferIn({
+                requestType: 'class',
+                recipient: 'interface',
+                request: 3, // DFU_GETSTATUS
+                value: 0,
+                index: this.interface.interfaceNumber
+            }, 6);
+            if (result.data && result.data.byteLength >= 6) {
+                const buffer = new Uint8Array(result.data.buffer);
+                return {
+                    status: buffer[0],
+                    pollTimeout: buffer[1] | (buffer[2] << 8) | (buffer[3] << 16),
+                    state: buffer[4],
+                    iString: buffer[5]
+                };
+            }
+        } catch (e) {
+            // Return null on communication error
+            return null;
+        }
+        return null;
+    }
+    // Parse DFU file format if needed
+    parseDfuFile(arrayBuffer) {
+        const data = new Uint8Array(arrayBuffer);
+        // Check for DFU suffix (last 16 bytes)
+        if (data.length < 16) {
+            return { data: arrayBuffer, isDfu: false };
+        }
+        const suffixStart = data.length - 16;
+        const suffix = data.slice(suffixStart);
+        // Check DFU signature "UFD"
+        if (suffix[10] === 0x55 && suffix[9] === 0x46 && suffix[8] === 0x44) {
+            console.log("STM32DFU: DFU file format detected");
+            // Remove DFU suffix for raw programming
+            return { 
+                data: arrayBuffer.slice(0, suffixStart), 
+                isDfu: true 
+            };
+        }
+        return { data: arrayBuffer, isDfu: false };
+    }
+    async download(firmware, progressCallback) {
+        console.log(`STM32DFU: Starting download of ${firmware.byteLength} bytes`);
+        // Parse DFU file if needed
+        const parsed = this.parseDfuFile(firmware);
+        const actualFirmware = parsed.data;
+        this.isDfuFile = parsed.isDfu;
+        console.log(`STM32DFU: Using ${actualFirmware.byteLength} bytes of firmware data (DFU: ${this.isDfuFile})`);
+        const chunks = Math.ceil(actualFirmware.byteLength / this.transferSize); 
+        let bytesWritten = 0;
+        // Ensure device is in idle state
+        await this.waitForState(this.DFU_STATE.dfuIDLE);
+        // Step 1: Page erase (NOT mass erase - match STM32CubeProgrammer)
+        console.log("STM32DFU: Performing page erase for sector 0...");
+        await this.pageErase(this.flashAddress);
+        // Step 2: Set address pointer (required for STM32)
+        console.log("STM32DFU: Setting address pointer...");
+        await this.setAddressPointer(this.flashAddress);
+        // Step 2: Download all firmware chunks
+        console.log("STM32DFU: Starting firmware download phase...");
+        for (let i = 0; i < chunks; i++) {
+            const start = i * this.transferSize; 
+            const end = Math.min(start + this.transferSize, actualFirmware.byteLength);
+            const chunk = actualFirmware.slice(start, end); 
+            console.log(`STM32DFU: Downloading chunk ${i + 1}/${chunks} (${chunk.byteLength} bytes)`);
+            // Send chunk using DFU_DNLOAD
+            let success = false;
+            let lastError = null;
+            for (let retry = 0; retry < this.maxRetries; retry++) {
+                try {
+                    await this.device.controlTransferOut({
+                        requestType: 'class',
+                        recipient: 'interface',
+                        request: 1, // DFU_DNLOAD
+                        value: i + 2, // Block number (2-based after address command)
+                        index: this.interface.interfaceNumber
+                    }, chunk);
+                    success = true;
+                    break;
+                } catch (error) {
+                    lastError = error;
+                    console.warn(`STM32DFU: Chunk ${i + 1} attempt ${retry + 1} failed:`, error.message);
+                    if (retry < this.maxRetries - 1) {
+                        await new Promise(resolve => setTimeout(resolve, 100));
+                    }
+                }
+            }
+            if (!success) {
+                throw new Error(`Failed to send chunk ${i + 1} after ${this.maxRetries} attempts`);
+            }
+            // Wait for chunk to be processed - CRITICAL: Follow AN3156 sequence
+            await this.waitForDownloadCompletion();
+            bytesWritten += chunk.byteLength;
+            if (progressCallback) {
+                progressCallback({
+                    bytesWritten,
+                    bytesTotal: actualFirmware.byteLength,
+                    progress: bytesWritten / actualFirmware.byteLength
+                }); 
+            }
+        }
+        // Step 3: Send zero-length DFU_DNLOAD to trigger manifestation
+        console.log("STM32DFU: Sending manifestation command...");
+        await this.device.controlTransferOut({
+            requestType: 'class',
+            recipient: 'interface',
+            request: 1, // DFU_DNLOAD
+            value: 0, // Zero-length download triggers manifestation
+            index: this.interface.interfaceNumber
+        }, new ArrayBuffer(0));
+        // Step 4: Get status to trigger manifestation - MANDATORY per AN3156
+        console.log("STM32DFU: Triggering manifestation via DFU_GETSTATUS...");
+        const manifestStatus = await this.getStatus();
+        if (!manifestStatus) {
+            throw new Error("Failed to get manifestation status");
+        }
+        console.log(`STM32DFU: Manifestation status - State: ${manifestStatus.state}, Status: ${manifestStatus.status}`);
+        if (manifestStatus.state !== this.DFU_STATE.dfuMANIFEST_SYNC && 
+            manifestStatus.state !== this.DFU_STATE.dfuMANIFEST) {
+            throw new Error(`Unexpected manifestation state: ${manifestStatus.state}`);
+        }
+        // Step 5: Handle manifestation completion
+        console.log("STM32DFU: Handling manifestation completion...");
+        await this.handleManifestation();
+        console.log("STM32DFU: Download and programming completed successfully");
+    }
+    // Page erase command (0x41 + address) - Match STM32CubeProgrammer exactly  
+    async pageErase(address) {
+        console.log(`STM32DFU: Starting page erase at address 0x${address.toString(16)}`);
+        // Create page erase command: 0x41 + 4 byte address (little endian)
+        const eraseCmd = new ArrayBuffer(5);
+        const view = new DataView(eraseCmd);
+        view.setUint8(0, 0x41); // Page erase command
+        view.setUint32(1, address, true); // Little endian address
+        // Send command
+        await this.device.controlTransferOut({
+            requestType: 'class',
+            recipient: 'interface',
+            request: 1, // DFU_DNLOAD
+            value: 0, // Command block
+            index: this.interface.interfaceNumber
+        }, eraseCmd);
+        // Trigger command execution with DFU_GETSTATUS
+        const status = await this.getStatus();
+        if (!status || status.state !== this.DFU_STATE.dfuDNBUSY) {
+            throw new Error(`Page erase failed - unexpected state: ${status ? status.state : 'null'}`);
+        }
+        console.log("STM32DFU: Page erase in progress...");
+        // Wait for page erase completion (~300ms based on CubeProgrammer log)
+        await this.waitForState(this.DFU_STATE.dfuDNLOAD_IDLE, 5000); 
+        console.log("STM32DFU: Page erase completed successfully");
+    }
+    // Set address pointer command (0x21) - Required for STM32
+    async setAddressPointer(address) {
+        console.log(`STM32DFU: Setting address pointer to 0x${address.toString(16)}`);
+        // Create address command: 0x21 + 4 byte address (little endian)
+        const addressCmd = new ArrayBuffer(5);
+        const view = new DataView(addressCmd);
+        view.setUint8(0, 0x21); // Set address command
+        view.setUint32(1, address, true); // Little endian
+        // Send command
+        await this.device.controlTransferOut({
+            requestType: 'class',
+            recipient: 'interface',
+            request: 1, // DFU_DNLOAD
+            value: 0, // Command block
+            index: this.interface.interfaceNumber
+        }, addressCmd);
+        // Trigger command execution with DFU_GETSTATUS
+        const status = await this.getStatus();
+        if (!status || status.state !== this.DFU_STATE.dfuDNBUSY) {
+            throw new Error(`Set address failed - unexpected state: ${status ? status.state : 'null'}`);
+        }
+        // Wait for command completion
+        await this.waitForState(this.DFU_STATE.dfuDNLOAD_IDLE);
+        console.log("STM32DFU: Address pointer set successfully");
+    }
+    // Wait for specific DFU state
+    async waitForState(expectedState, timeout = 5000) {
+        const startTime = Date.now();
+        while (Date.now() - startTime < timeout) {
+            try {
+                const status = await this.getStatus();
+                if (status && status.state === expectedState) {
+                    return status;
+                }
+                if (status && status.state === this.DFU_STATE.dfuERROR) {
+                    throw new Error(`Device in error state - Status: ${status.status}`);
+                }
+                // Wait based on device poll timeout if available
+                const waitTime = status && status.pollTimeout > 0 ? status.pollTimeout : this.statusCheckDelay;
+                await new Promise(resolve => setTimeout(resolve, waitTime));
+            } catch (error) {
+                if (Date.now() - startTime >= timeout) {
+                    throw new Error(`Timeout waiting for state ${expectedState}: ${error.message}`);
+                }
+                await new Promise(resolve => setTimeout(resolve, this.statusCheckDelay));
+            }
+        }
+        throw new Error(`Timeout waiting for DFU state ${expectedState}`);
+    }
+    // Wait for download completion following STM32CubeProgrammer timing
+    async waitForDownloadCompletion() {
+        // First DFU_GETSTATUS should return dfuDNBUSY
+        const busyStatus = await this.getStatus();
+        if (!busyStatus) {
+            throw new Error("Failed to get download status");
+        }
+        if (busyStatus.state === this.DFU_STATE.dfuDNBUSY) {
+            // Wait for the poll timeout (~30-35ms based on CubeProgrammer)
+            const waitTime = Math.max(busyStatus.pollTimeout || 30, 30);
+            await new Promise(resolve => setTimeout(resolve, waitTime));
+            // Wait for completion
+            await this.waitForState(this.DFU_STATE.dfuDNLOAD_IDLE);
+        } else if (busyStatus.state === this.DFU_STATE.dfuDNLOAD_IDLE) {
+            // Already completed
+            return;
+        } else {
+            throw new Error(`Unexpected download state: ${busyStatus.state}`);
+        }
+    }
+    // Handle manifestation phase according to AN3156
+    async handleManifestation() {
+        let attempts = 0;
+        const maxAttempts = 30;
+        while (attempts < maxAttempts) {
+            try {
+                const status = await this.getStatus();
+                if (!status) {
+                    // Device may have disconnected - this is expected for STM32F411
+                    console.log("STM32DFU: Device disconnected during manifestation (expected for STM32F411)");
+                    // Wait for device reset
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                    return;
+                }
+                console.log(`STM32DFU: Manifestation state: ${status.state}, status: ${status.status}`);
+                switch (status.state) {
+                    case this.DFU_STATE.dfuMANIFEST:
+                        console.log("STM32DFU: Device programming flash...");
+                        // Wait for device poll timeout
+                        const waitTime = Math.max(status.pollTimeout || 1000, 1000);
+                        await new Promise(resolve => setTimeout(resolve, waitTime));
+                        break;
+                    case this.DFU_STATE.dfuMANIFEST_WAIT_RESET:
+                        console.log("STM32DFU: Programming complete, device waiting for reset");
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                        return;
+                    case this.DFU_STATE.dfuIDLE:
+                        console.log("STM32DFU: Device returned to idle - manifestation complete");
+                        return;
+                    case this.DFU_STATE.dfuERROR:
+                        throw new Error(`Manifestation error - Status: ${status.status}`);
+                    default:
+                        console.warn(`STM32DFU: Unexpected manifestation state: ${status.state}`);
+                        await new Promise(resolve => setTimeout(resolve, 500));
+                }
+            } catch (error) {
+                // Handle expected disconnection
+                if (error.name === 'NotFoundError' || 
+                    error.message.includes('disconnected') ||
+                    error.message.includes('device was disconnected')) {
+                    console.log("STM32DFU: Device disconnected during manifestation (expected behavior)");
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                    return;
+                }
+                console.warn(`STM32DFU: Manifestation error: ${error.message}`);
+                await new Promise(resolve => setTimeout(resolve, 500));
+            }
+            attempts++;
+        }
+        console.log("STM32DFU: Manifestation monitoring completed with timeout");
+    }
+    async disconnect() {
+        if (this.device && this.device.opened) {
+            try {
+                await this.device.close(); 
+            } catch (e) {
+                console.warn("STM32DFU: Error during disconnect:", e);
+            }
+        }
+    }
+}
+// Main application
+(async function() {
+    const statusEl = document.getElementById('statusMessage');
+    const deviceEl = document.getElementById('deviceDetails');
+    const initBtn = document.getElementById('initBtn');
+    const fetchBtn = document.getElementById('fetchFirmwareBtn');
+    const flashBtn = document.getElementById('flashBtn');
+    const progressBar = document.getElementById('progressBar');
+    const progressText = document.getElementById('progressText');
+    const progressContainer = document.getElementById('progressContainer');
+    const updateSection = document.getElementById('updateSection');
+    const fileInput = document.getElementById('fileInput');
+    const isWindows = navigator.platform.toLowerCase().includes('win') || 
+                     navigator.userAgent.toLowerCase().includes('windows');
+    const windowsSetup = document.getElementById('windowsSetup');
+    if (isWindows) {
+    statusEl.innerHTML = `
+        <div class="status-message windows-detected">
+            <div><strong>Windows Detected</strong></div>
+            <div>If this is your first time updating KRONO, please check the driver installation section above</div>
+        </div>
+    `; 
+    // Make the Windows arrow blink 
+    const windowsArrow = document.getElementById('windowsDrivers-arrow');
+    if (windowsArrow) {
+        windowsArrow.classList.add('blink');
+    }
+}
+// Accordion functionality
+window.toggleAccordion = function(id) {
+    const content = document.getElementById(id + '-content');
+    const arrow = document.getElementById(id + '-arrow');
+    const hint = document.querySelector('.click-hint');
+    const windowsWrapper = document.querySelector('.windows-section-wrapper');
+    const isMobile = window.innerWidth <= 768;
+    if (content.style.display === 'none' || content.style.display === '') {
+        // Opening accordion
+        if (isMobile) {
+            content.style.display = 'block';
+        } else {
+            // Desktop: animated display
+            content.style.display = 'block';
+            // Force reflow before adding class for smooth animation
+            content.offsetHeight;
+            content.classList.add('opening');
+        }
+        arrow.textContent = '▼'; // Keep same symbol
+        arrow.classList.add('rotated'); // Add rotation class
+        hint.textContent = 'HIDE';
+        windowsWrapper.classList.add('accordion-open');
+        // Stop blinking when accordion is opened
+        arrow.classList.remove('blink');
+        arrow.classList.add('expanded');
+    } else {
+        // Closing accordion
+        if (isMobile) {
+            // Mobile: instant hide
+            content.style.display = 'none';
+        } else {
+            // Desktop: animated hide
+            content.classList.remove('opening');
+            // Wait for animation to complete before hiding
+            setTimeout(() => {
+                if (!content.classList.contains('opening')) {
+                    content.style.display = 'none';
+                }
+            }, 600); // Match the CSS transition duration
+        }
+        arrow.textContent = '▼'; // Keep same symbol
+        arrow.classList.remove('rotated'); // Remove rotation class
+        hint.textContent = 'SHOW';
+        windowsWrapper.classList.remove('accordion-open');
+        // Remove expanded class but don't restart blinking
+        arrow.classList.remove('expanded');
+    }
+};
+    if (!navigator.usb) {
+        statusEl.innerHTML = '<div class="status-message error">WebUSB not supported. Use Chrome/Edge.</div>'; 
+        initBtn.disabled = true;
+        fetchBtn.disabled = true;
+        return;
+    }
+    if (location.protocol !== 'https:' && location.hostname !== 'localhost') { 
+        statusEl.innerHTML = '<div class="status-message warning">WebUSB requires HTTPS. Some devices may not work.</div>'; 
+    }
+    const dfu = new STM32DFU();
+    let firmware = null;
+    statusEl.innerHTML = `
+        <div class="status-message">
+            <div><strong>Authorization Required</strong></div>
+            <div>The browser will ask for permission to access KRONO via USB</div>
+        </div>
+    `; 
+    fetchBtn.addEventListener('click', async () => {
+        try {
+            fetchBtn.disabled = true;
+            statusEl.innerHTML = '<div class="status-message">Searching for latest firmware on GitHub...</div>';
+            const response = await fetch('https://api.github.com/repos/sitar93/krono/releases/latest');
+            if (!response.ok) {
+                throw new Error(`GitHub API error: ${response.status}`);
+            }
+            const release = await response.json();
+            const asset = release.assets.find(a => 
+                a.name.toLowerCase().endsWith('.bin') || 
+                a.name.toLowerCase().endsWith('.hex') ||
+                a.name.toLowerCase().endsWith('.dfu')
+            );
+            if (!asset) {
+                throw new Error("No firmware file (.bin/.hex/.dfu) found in latest release");
+            }
+            statusEl.innerHTML = `<div class="status-message">Found: <strong>${asset.name}</strong>.<br>Download will start shortly via browser.<br>Then select the downloaded file using "Select a local firmware file:".</div>`;
+            const downloadLink = document.createElement('a');
+            downloadLink.href = asset.browser_download_url;
+            downloadLink.download = asset.name; 
+            document.body.appendChild(downloadLink);
+            downloadLink.click();
+            document.body.removeChild(downloadLink);
+            firmware = null;
+            if (fileInput) { 
+                fileInput.value = null; 
+            }
+            flashBtn.disabled = true; 
+            setTimeout(() => {
+                statusEl.innerHTML = `<div class="status-message">Download of <strong>"${asset.name}"</strong> started.<br>Now select the downloaded file below to proceed.</div>`;
+            }, 2500); 
+            fetchBtn.disabled = false; 
+        } catch (error) {
+            fetchBtn.disabled = false;
+            statusEl.innerHTML = `<div class="status-message error">Download failed: ${error.message}</div>`;
+            console.error('Download error:', error);
+            flashBtn.disabled = true; 
+            firmware = null;
+        }
+    });
+    initBtn.addEventListener('click', async () => {
+        try {
+            initBtn.disabled = true; 
+            statusEl.innerHTML = `
+                <div class="status-message">
+                    <div><strong>Searching for STM32 DFU devices...</strong></div>
+                    <div>Authorize access when prompted by the browser</div>
+                </div>
+            `;
+            await new Promise(resolve => setTimeout(resolve, 500));
+            await dfu.connect();
+            deviceEl.innerHTML = `
+                <strong>Connected:</strong> STM32F411 DFU<br>
+                <strong>Vendor ID:</strong> 0x${dfu.device.vendorId.toString(16).padStart(4, '0')}<br>
+                <strong>Product ID:</strong> 0x${dfu.device.productId.toString(16).padStart(4, '0')}<br>
+                <strong>Transfer size:</strong> ${dfu.transferSize} bytes<br>
+                <strong>Flash address:</strong> 0x${dfu.flashAddress.toString(16)}
+            `;
+            updateSection.style.display = 'block';
+            statusEl.innerHTML = '<div class="status-message success"><strong>STM32F411 connected and ready for firmware update</strong></div>';
+            fileInput.value = null; 
+            firmware = null;
+            flashBtn.disabled = true;
+            fileInput.disabled = false; 
+        } catch (error) {
+            initBtn.disabled = false;
+            initBtn.style.background = '#DD22CD';
+            if (error.name === 'SecurityError') {
+                statusEl.innerHTML = `
+                    <div class="status-message warning">
+                        <div><strong>Authorization Denied</strong></div>
+                        <div>
+                            • Make sure the KRONO module is in DFU mode<br>
+                            • Click again and <strong>authorize USB access</strong> when prompted<br>
+                            • Verify you're using Chrome/Edge on HTTPS<br>
+                            ${isWindows ? 
+                            '• <strong>Windows users:</strong> Ensure WinUSB driver is installed via Zadig' : ''}
+                        </div>
+                    </div>
+                `;
+            } else if (error.name === 'NotFoundError') {
+                statusEl.innerHTML = `
+                    <div class="status-message warning">
+                        <div><strong>No STM32 DFU Device Found</strong></div>
+                        <div>
+                            • Connect KRONO via USB-C<br>
+                            • Hold BOOT button (left), press RESET button (right) once, then release both buttons<br>
+                            • Module should appear as "STM32 BOOTLOADER"<br>
+                            ${isWindows ? 
+                            '• <strong>Windows users:</strong> Check Device Manager for STM32 DFU device' : ''}
+                        </div>
+                    </div>
+                `;
+            } else {
+                statusEl.innerHTML = `
+                    <div class="status-message error">
+                        <div><strong>Connection Error</strong></div>
+                        <div>${error.message}</div>
+                    </div>
+                `;
+            }
+            console.error('Connection error:', error);
+        }
+    });
+    fileInput.addEventListener('change', async (event) => {
+        console.log('File input changed, files:', event.target.files);
+        const file = event.target.files[0];
+        if (file) {
+            console.log('File selected:', file.name, file.size);
+            if (dfu && dfu.device && dfu.device.opened) { 
+                try {
+                    statusEl.innerHTML = `<div class="status-message">Loading ${file.name}...</div>`;
+                    firmware = await file.arrayBuffer();
+                    flashBtn.disabled = false;
+                    // Check file type
+                    const isDfu = file.name.toLowerCase().endsWith('.dfu');
+                    const fileType = isDfu ? 'DFU' : 'BIN';
+                    statusEl.innerHTML = `<div class="status-message success">${fileType} file: ${file.name} loaded (${(firmware.byteLength/1024).toFixed(1)}KB). Ready to program.</div>`;
+                } catch (error) {
+                    statusEl.innerHTML = `<div class="status-message error">File loading error: ${error.message}</div>`;
+                    console.error('File loading error:', error);
+                    firmware = null;
+                    flashBtn.disabled = true;
+                }
+            } else {
+                statusEl.innerHTML = '<div class="status-message warning">Please connect the KRONO module first.</div>';
+                fileInput.value = null; 
+            }
+        } else {
+            console.log('No file selected');
+            const isFirmwareFromFetch = fetchBtn.disabled === false && flashBtn.disabled === false && firmware !== null;
+            if (!isFirmwareFromFetch) {
+                 firmware = null; 
+                 flashBtn.disabled = true;
+            }
+        }
+    });
+    flashBtn.addEventListener('click', async () => {
+        if (!dfu.device || !dfu.device.opened) {
+            statusEl.innerHTML = "<div class='status-message error'>Error: Device connection lost or not open. Try reconnecting.</div>";
+            console.error("Flash attempt on unopened device:", dfu.device);
+            flashBtn.disabled = true; 
+            fileInput.disabled = false;
+            initBtn.disabled = false; 
+            return;
+        }
+        if (!firmware) {
+            statusEl.innerHTML = "<div class='status-message error'>No firmware loaded</div>";
+            return;
+        }
+        try {
+            flashBtn.disabled = true; 
+            fetchBtn.disabled = true; 
+            fileInput.disabled = true;
+            progressContainer.style.display = 'block';
+            statusEl.innerHTML = `
+                <div class="status-message">
+                    <div><strong>Programming STM32F411 flash memory...</strong></div>
+                    <div>
+                        Page erasing sector 0, then programming new firmware<br>
+                        Following STM32 protocol sequence<br>
+                        Please don't disconnect the module during this process
+                    </div>
+                </div>
+            `;
+            await dfu.download(firmware, (progress) => {
+                const percent = Math.floor(progress.progress * 100);
+                progressBar.style.width = `${percent}%`;
+                progressText.textContent = `${percent}% (${Math.floor(progress.bytesWritten/1024)}KB/${Math.floor(progress.bytesTotal/1024)}KB)`;
+            });
+            statusEl.innerHTML = `
+                <div class="status-message success">
+                    <div><strong>Programming completed successfully!</strong></div>
+                    <div>
+                        STM32F411 flash memory programmed using STM32 protocol.<br>
+                        The module has reset and is running the new firmware.<br>
+                        <strong>Verification:</strong> Page erase + download sequence matching official tools.
+                    </div>
+                </div>
+            `;
+            // Give some time for the user to see the success message
+            setTimeout(() => {
+                dfu.disconnect();
+                initBtn.disabled = false;
+                fetchBtn.disabled = false;
+                initBtn.style.background = '#DD22CD';
+                fetchBtn.style.background = '#DD22CD';
+                updateSection.style.display = 'block'; 
+                deviceEl.innerHTML = ''; 
+                progressContainer.style.display = 'none';
+                statusEl.innerHTML = `
+                    <div class="status-message success">
+                        <div><strong>Programming Complete</strong></div>
+                        <div>
+                            Your KRONO has been successfully updated with new firmware.<br>
+                            You can now disconnect.
+                        </div>
+                    </div>
+                `;
+                firmware = null; 
+            }, 5000);
+        } catch (error) {
+            flashBtn.disabled = false;
+            fetchBtn.disabled = false;
+            fileInput.disabled = false;
+            flashBtn.style.background = '#DD22CD';
+            fetchBtn.style.background = '#DD22CD';
+            statusEl.innerHTML = `
+                <div class="status-message error">
+                    <div><strong>Programming failed: ${error.message}</strong></div>
+                    <div>
+                        Please check that:<br>
+                        • Module is properly connected in DFU mode<br>
+                        • Firmware file is valid for STM32F411<br>
+                        • Try reconnecting and programming again
+                    </div>
+                </div>
+            `;
+            console.error('Programming error:', error);
+        }
+    });
+    window.addEventListener('beforeunload', () => {
+        dfu.disconnect(); 
+    });
+})();
+</script>
+<script>
+    // Fix cookie preferences order specifically for this page
+    document.addEventListener('DOMContentLoaded', function() {
+        setTimeout(function() {
+            const cookieManager = document.querySelector('.cookie-banner-manager');
+            const footer = document.querySelector('footer');
+            if (cookieManager && footer) {
+                footer.appendChild(cookieManager);
+            }
+        }, 500);
+    });
+    </script>
+<style>
+    /* Isolated KRONO Updater CSS - all rules scoped to prevent global conflicts */
+    .krono-updater-container {
+        /* Base styles following jolin.tech/about design system */
+        --color-black: #000000;
+        --color-white: #ffffff;
+        --color-gray-50: #fafafa;
+        --color-gray-100: #f5f5f5;
+        --color-gray-200: #e5e5e5;
+        --color-gray-300: #d4d4d4;
+        --color-gray-400: #a3a3a3;
+        --color-gray-500: #737373;
+        --color-gray-600: #525252;
+        --color-gray-700: #404040;
+        --color-gray-800: #262626;
+        --color-gray-900: #171717;
+        --color-green-500: #22c55e;
+        --color-green-600: #16a34a;
+        --color-red-500: #ef4444;
+        --color-red-600: #dc2626;
+        --color-yellow-500: #eab308;
+        --color-yellow-600: #ca8a04;
+        --color-purple-500: #DD22CD;
+        --color-purple-600: #c41fb8;
+        --font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+    }
+    .krono-updater-container body {
+        font-family: var(--font-family);
+        background: var(--color-gray-50);
+        margin: 0;
+        padding: 20px;
+        color: var(--color-gray-900);
+    }
+    /* Mobile responsive styles */
+    @media (max-width: 768px) {
+        .krono-updater-container body {
+            padding: 16px;
+        }
+        .krono-updater-container .krono-updater {
+            padding: 24px 20px;
+            margin: 0 8px;
+        }
+        .krono-updater-container .krono-updater h2 {
+            font-size: 1.8rem;
+            margin-bottom: 24px;
+        }
+        .krono-updater-container .browser-compatibility,
+        .krono-updater-container .notes-section,
+        .krono-updater-container #updateSection {
+          margin-left: -4px;
+          margin-right: -4px;
+           padding-left: 20px;
+          padding-right: 20px;
+        }
+        .krono-updater-container #statusBox {
+            margin-left: -4px;
+            margin-right: -4px;
+            padding-left: 20px;
+            padding-right: 20px;
+        }
+    }
+    @media (max-width: 480px) {
+    .krono-updater-container body {
+        padding: 12px;
+    }
+    .krono-updater-container .krono-updater {
+        padding: 20px 16px;
+        margin: 0 4px;
+    }
+    .krono-updater-container .krono-updater h2 {
+        font-size: 1.5rem;
+        margin-bottom: 20px;
+    }
+    .krono-updater-container .browser-compatibility,
+    .krono-updater-container .notes-section,
+    .krono-updater-container #updateSection {
+        margin-left: -8px;
+        margin-right: -8px;
+        padding-left: 16px;
+        padding-right: 16px;
+    }
+    .krono-updater-container #statusBox {
+        margin-left: -8px;
+        margin-right: -8px;
+        padding-left: 16px;
+        padding-right: 16px;
+    }
+}
+    .krono-updater-container .krono-updater {
+        max-width: 800px;
+        margin: 0 auto;
+        background: var(--color-white);
+        border-radius: 0;
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        padding: 32px;
+        border: 1px solid var(--color-gray-200);
+        padding: 32px 22px;
+    }
+    .krono-updater-container .krono-updater h2 {
+        text-align: center;
+        margin: 0 0 32px 0;
+        font-size: 2.4rem;
+        font-weight: 700;
+        color: var(--color-gray-900);
+        letter-spacing: -0.025em;
+    }
+    .krono-updater-container .steps {
+        margin: 32px 0;
+        background: var(--color-gray-50);
+        padding: 24px;
+        border-radius: 0;
+        border: 1px solid var(--color-gray-200);
+    }
+    .krono-updater-container .step {
+        padding: 16px 20px;
+        background: var(--color-white);
+        margin-bottom: 12px;
+        border-radius: 0;
+        border-left: 4px solid var(--color-purple-500);
+        box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+    }
+    .krono-updater-container .step:last-child {
+        margin-bottom: 0;
+    }
+    .krono-updater-container .step strong {
+        display: block;
+        margin-bottom: 4px;
+        font-weight: 600;
+        color: var(--color-gray-900);
+    }
+    .krono-updater-container .step-subtitle {
+        font-size: 0.875rem;
+        color: var(--color-gray-600);
+        line-height: 1.5;
+        word-wrap: break-word;
+        max-width: 100%;
+    }
+    .krono-updater-container .step-list {
+        margin-top: 12px;
+    }
+    .krono-updater-container .step-list ol {
+        margin: 0;
+        padding-left: 20px;
+        color: var(--color-gray-700);
+    }
+    .krono-updater-container .step-list ol li {
+        margin-bottom: 8px;
+        font-size: 0.875rem;
+        line-height: 1.4;
+    }
+    .krono-updater-container .button-container {
+        display: flex;
+        justify-content: center;
+        margin: 24px 0;
+    }
+    .krono-updater-container button {
+        background: var(--color-purple-500);
+        color: var(--color-white);
+        border: none;
+        border-radius: 0;
+        padding: 12px 24px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        min-height: 44px;
+        font-family: var(--font-family);
+        min-width: 200px;
+    }
+    .krono-updater-container button:hover:not(:disabled) {
+        background: var(--color-purple-600);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(221, 34, 205, 0.3);
+    }
+    .krono-updater-container button:active:not(:disabled) {
+        transform: translateY(0);
+    }
+    .krono-updater-container button:disabled {
+        background: var(--color-gray-300);
+        color: var(--color-gray-500);
+        cursor: not-allowed;
+        transform: none;
+        box-shadow: none;
+    }
+    /* Mobile button and form improvements */
+    @media (max-width: 768px) {
+        .krono-updater-container button {
+            min-width: 160px;
+            padding: 14px 20px;
+            font-size: 16px; /* Prevent zoom on iOS */
+        }
+        .krono-updater-container .file-input {
+            width: 120%;
+            padding: 12px 16px;
+            font-size: 16px; /* Prevent zoom on iOS */
+        }
+        .krono-updater-container .file-label {
+            font-size: 16px;
+            margin: 20px 0 12px 0;
+        }
+        .krono-updater-container .step {
+            padding: 14px 16px;
+            margin-bottom: 10px;
+        }
+        .krono-updater-container .step strong {
+            font-size: 15px;
+        }
+        .krono-updater-container .step-subtitle {
+            font-size: 0.8rem;
+        }
+        .krono-updater-container .step-list ol li {
+            font-size: 0.8rem;
+            margin-bottom: 6px;
+        }
+    }
+    @media (max-width: 480px) {
+        .krono-updater-container button {
+            min-width: 140px;
+            padding: 12px 16px;
+            font-size: 14px;
+        }
+        .krono-updater-container .file-input {
+            width: 100%;
+            padding: 10px;
+        }
+        .krono-updater-container .step {
+            padding: 12px 14px;
+        }
+        .krono-updater-container .step strong {
+            font-size: 14px;
+        }
+    }
+    .krono-updater-container .file-label {
+        display: block;
+        margin: 24px 0 8px 0;
+        font-weight: 600;
+        color: var(--color-gray-900);
+        font-size: 14px;
+        text-align: center;
+    }
+    .krono-updater-container .file-input {
+        display: block;
+        width: 100%;
+        max-width: 600px;
+        padding: 8px 12px;
+        border: 2px solid var(--color-gray-200);
+        border-radius: 0;
+        font-size: 14px;
+        color: var(--color-gray-900);
+        background: var(--color-white);
+        margin: 0 auto 16px auto;
+        font-family: var(--font-family);
+        box-sizing: border-box;
+    }
+    .krono-updater-container .file-input:focus {
+        outline: none;
+        border-color: var(--color-purple-500);
+    }
+    .krono-updater-container #progressContainer {
+        margin-top: 24px;
+        background: var(--color-gray-50);
+        padding: 20px;
+        border-radius: 0;
+        border: 1px solid var(--color-gray-200);
+    }
+    .krono-updater-container #progressBar {
+        height: 8px;
+        background: var(--color-purple-500);
+        border-radius: 0;
+        transition: width 0.3s ease;
+        width: 0%;
+        margin-bottom: 12px;
+    }
+    .krono-updater-container #progressText {
+        text-align: center;
+        font-weight: 600;
+        color: var(--color-gray-700);
+        font-size: 14px;
+    }
+    .krono-updater-container #statusBox {
+        margin-top: 32px;
+        padding: 20px;
+        background: var(--color-black);
+        border-radius: 0;
+        border: 2px solid var(--color-gray-400);
+        font-family: 'Courier New', 'Lucida Console', monospace;
+        font-size: 12px;
+        line-height: 1.4;
+        min-height: 120px;
+        box-shadow: inset 2px 2px 4px rgba(0, 0, 0, 0.3);
+        max-width: 846px;
+        margin-left: auto;
+        margin-right: auto;
+    }
+    .krono-updater-container .status-message {
+        line-height: 1.4;
+        color: var(--color-white);
+        font-family: 'Courier New', 'Lucida Console', monospace;
+        font-size: 12px;
+        margin: 0;
+        padding: 0;
+    }
+    .krono-updater-container .status-message div:first-child {
+        font-weight: normal;
+        color: var(--color-white);
+        margin-bottom: 4px;
+        text-transform: uppercase;
+    }
+    .krono-updater-container .status-message div:last-child {
+        font-size: 12px;
+        color: var(--color-gray-300);
+        font-weight: normal;
+    }
+    .krono-updater-container .status-message.success {
+        background: transparent;
+        border: none;
+        border-radius: 0;
+        padding: 0;
+        color: var(--color-white);
+    }
+    .krono-updater-container .status-message.success div:first-child {
+        color: var(--color-white);
+    }
+    .krono-updater-container .status-message.success div:last-child {
+        color: var(--color-gray-300);
+    }
+    .krono-updater-container .status-message.error {
+        background: transparent;
+        border: none;
+        border-radius: 0;
+        padding: 0;
+        color: var(--color-white);
+    }
+    .krono-updater-container .status-message.error div:first-child {
+        color: var(--color-white);
+    }
+    .krono-updater-container .status-message.error div:last-child {
+        color: var(--color-gray-300);
+    }
+    .krono-updater-container .status-message.warning {
+        background: transparent;
+        border: none;
+        border-radius: 0;
+        padding: 0;
+        color: var(--color-white);
+    }
+    .krono-updater-container .status-message.warning div:first-child {
+        color: var(--color-white);
+    }
+    .krono-updater-container .status-message.warning div:last-child {
+        color: var(--color-gray-300);
+    }
+    /* Mobile status box improvements */
+    @media (max-width: 768px) {
+        .krono-updater-container #statusBox {
+            padding: 16px;
+            font-size: 11px;
+            min-height: 100px;
+        }
+        .krono-updater-container .status-message {
+            font-size: 11px;
+        }
+        .krono-updater-container .status-message div:first-child {
+            font-size: 11px;
+            margin-bottom: 6px;
+        }
+        .krono-updater-container .status-message div:last-child {
+            font-size: 10px;
+        }
+        .krono-updater-container #deviceDetails {
+            font-size: 10px;
+            padding: 6px 0 0 0;
+        }
+        .krono-updater-container #progressContainer {
+            padding: 16px;
+        }
+        .krono-updater-container #progressText {
+            font-size: 12px;
+        }
+    }
+    @media (max-width: 480px) {
+        .krono-updater-container #statusBox {
+            padding: 12px;
+            font-size: 10px;
+            min-height: 80px;
+        }
+        .krono-updater-container .status-message {
+            font-size: 10px;
+        }
+        .krono-updater-container .status-message div:first-child {
+            font-size: 10px;
+        }
+        .krono-updater-container .status-message div:last-child {
+            font-size: 9px;
+        }
+        .krono-updater-container #deviceDetails {
+            font-size: 9px;
+        }
+    }
+    .krono-updater-container .windows-detected {
+        text-align: left;
+        background: transparent;
+        border: none;
+        border-radius: 0;
+        padding: 0;
+        color: var(--color-white);
+    }
+    .krono-updater-container #deviceDetails {
+        font-size: 12px;
+        line-height: 1.4;
+        color: var(--color-gray-300);
+        background: transparent;
+        padding: 8px 0 0 0;
+        border-radius: 0;
+        border: none;
+        margin-top: 8px;
+        font-family: 'Courier New', 'Lucida Console', monospace;
+    }
+    .krono-updater-container .windows-section-wrapper {
+        margin-bottom: 24px;
+        transition: margin-bottom 0.3s ease;
+    }
+    .krono-updater-container .windows-section-wrapper.accordion-open {
+        margin-bottom: 16px;
+    }
+    /* Ensure proper spacing only on larger screens */
+    @media (min-width: 769px) {
+        .krono-updater-container .windows-section-wrapper {
+            margin-bottom: 32px;
+        }
+        .krono-updater-container .windows-section-wrapper.accordion-open {
+            margin-bottom: 24px;
+        }
+    }
+    .krono-updater-container .windows-section-wrapper + .main-instructions-wrapper {
+        margin-top: 0;
+    }
+    .krono-updater-container .main-instructions-wrapper {
+        position: relative;
+    }
+    /* Mobile responsive spacing */
+    @media (max-width: 768px) {
+        .krono-updater-container .windows-section-wrapper {
+            margin-bottom: 32px;
+        }
+        .krono-updater-container .windows-section-wrapper.accordion-open {
+            margin-bottom: 24px;
+        }
+    }
+    @media (max-width: 480px) {
+        .krono-updater-container .windows-section-wrapper {
+            margin-bottom: 24px;
+        }
+        .krono-updater-container .windows-section-wrapper.accordion-open {
+            margin-bottom: 16px;
+        }
+    }
+    .krono-updater-container .windows-setup {
+        margin: 32px 0 0 0;
+        background: var(--color-gray-50);
+        border-radius: 0;
+        border: 1px solid var(--color-gray-200);
+    }
+    .krono-updater-container .accordion-section {
+        margin: 20px 0;
+    }
+    .krono-updater-container .accordion-header {
+        padding: 20px 24px;
+        background: var(--color-white);
+        border-radius: 0;
+        border: 3px solid var(--color-gray-600);
+        cursor: pointer;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        transition: all 0.2s ease;
+        position: relative;
+    }
+    .krono-updater-container .accordion-header:hover {
+        background: var(--color-gray-50);
+        border-color: var(--color-purple-500);
+        box-shadow: 0 2px 8px rgba(221, 34, 205, 0.1);
+    }
+    .krono-updater-container .accordion-header h3 {
+        margin: 0;
+        color: var(--color-gray-900);
+        font-size: 1.1rem;
+        font-weight: 600;
+        flex: 1;
+        line-height: 1.3;
+    }
+    .krono-updater-container .accordion-indicator {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        margin-left: 16px;
+    }
+    .krono-updater-container .click-hint {
+    font-size: 0.75rem;
+    color: var(--color-gray-500);
+    margin-bottom: 4px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    transition: color 0.2s ease;
+    width: 80px; 
+    text-align: center; 
+    display: inline-block; 
+    }
+    .krono-updater-container .accordion-header:hover .click-hint {
+        color: var(--color-purple-500);
+    }
+    .krono-updater-container .accordion-arrow {
+        font-size: 1.4rem;
+        color: var(--color-purple-500);
+        font-weight: bold;
+        transition: transform 0.2s ease;
+    }
+    .krono-updater-container .accordion-arrow.rotated {
+    transform: rotate(180deg);
+    }
+    .krono-updater-container .accordion-content {
+        padding: 24px;
+        background: var(--color-gray-50);
+        border-radius: 0;
+        border: 1px solid var(--color-gray-200);
+        border-top: none;
+        display: none;
+    }
+    /* Mobile accordion improvements */
+    @media (max-width: 768px) {
+        .krono-updater-container .accordion-header {
+            padding: 16px;
+            flex-direction: column;
+            align-items: flex-start;
+            text-align: left;
+        }
+        .krono-updater-container .accordion-header h3 {
+            font-size: 1rem;
+            margin-bottom: 12px;
+            line-height: 1.4;
+        }
+        .krono-updater-container .accordion-indicator {
+            align-self: flex-end;
+            margin-left: 0;
+            margin-top: -32px;
+        }
+        .krono-updater-container .accordion-content {
+            padding: 16px;
+        }
+        .krono-updater-container .setup-step {
+            flex-direction: column;
+            padding: 16px;
+        }
+        .krono-updater-container .step-number {
+            align-self: flex-start;
+            margin-right: 0;
+            margin-bottom: 12px;
+        }
+        .krono-updater-container .step-content strong {
+            font-size: 14px;
+        }
+        .krono-updater-container .step-note {
+            font-size: 0.8rem;
+        }
+    }
+    @media (max-width: 480px) {
+        .krono-updater-container .accordion-header {
+            padding: 12px;
+        }
+        .krono-updater-container .accordion-header h3 {
+            font-size: 0.9rem;
+        }
+        .krono-updater-container .accordion-content {
+            padding: 12px;
+        }
+        .krono-updater-container .setup-step {
+            padding: 12px;
+        }
+    }
+    /* Hide Windows setup section on mobile devices */
+    @media (max-width: 768px) {
+        .krono-updater-container .windows-section-wrapper {
+            display: none;
+        }
+    }
+    .krono-updater-container .setup-header {
+        text-align: center;
+        margin-bottom: 24px;
+        padding: 16px;
+        background: var(--color-white);
+        border-radius: 0;
+        border: 1px solid var(--color-gray-200);
+    }
+    .krono-updater-container .setup-header p {
+        margin: 0;
+        color: var(--color-gray-600);
+        font-size: 0.875rem;
+    }
+    .krono-updater-container .setup-steps {
+        margin: 24px 0;
+    }
+    .krono-updater-container .setup-step {
+        display: flex;
+        margin-bottom: 16px;
+        align-items: flex-start;
+        padding: 20px;
+        background: var(--color-white);
+        border-radius: 0;
+        border: 1px solid var(--color-gray-200);
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+    .krono-updater-container .setup-step:last-child {
+        margin-bottom: 0;
+    }
+    .krono-updater-container .step-number {
+        width: 32px;
+        height: 32px;
+        background: var(--color-purple-500);
+        color: var(--color-white);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: 14px;
+        margin-right: 16px;
+        flex-shrink: 0;
+    }
+    .krono-updater-container .step-content {
+        flex: 1;
+    }
+    .krono-updater-container .step-content strong {
+        display: block;
+        margin-bottom: 8px;
+        color: var(--color-gray-900);
+        font-size: 15px;
+        font-weight: 600;
+    }
+    .krono-updater-container .step-note {
+        font-size: 0.875rem;
+        color: var(--color-gray-600);
+        line-height: 1.5;
+    }
+    .krono-updater-container .download-link {
+        display: inline-block;
+        background: var(--color-purple-500);
+        color: var(--color-white);
+        padding: 10px 20px;
+        text-decoration: none;
+        border-radius: 0;
+        font-weight: 600;
+        margin: 8px 0;
+        transition: all 0.2s ease;
+        font-size: 14px;
+    }
+    .krono-updater-container .download-link:hover {
+        background: var(--color-purple-600);
+        text-decoration: none;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(221, 34, 205, 0.3);
+    }
+    .krono-updater-container .download-link-title {
+        color: var(--color-purple-500);
+        text-decoration: underline;
+        font-weight: 600;
+    }
+    .krono-updater-container .download-link-title:hover {
+        color: var(--color-purple-500);
+        text-decoration: underline;
+    }
+    .krono-updater-container .setup-warning {
+        background: var(--color-gray-100);
+        border: 1px solid var(--color-gray-200);
+        padding: 16px;
+        border-radius: 0;
+        margin: 16px 0;
+        font-size: 0.875rem;
+        color: var(--color-gray-900);
+        line-height: 1.5;
+    }
+    .krono-updater-container .step-subtitle a {
+        color: var(--color-purple-500);
+        text-decoration: underline;
+        font-weight: 600;
+    }
+    .krono-updater-container #updateSection {
+        margin: 16px 0;
+        padding: 20px;
+        background: var(--color-gray-50);
+        border-radius: 0;
+        border: 1px solid var(--color-gray-200);
+    }
+    .krono-updater-container .step,
+    .krono-updater-container .browser-compatibility,
+    .krono-updater-container .notes-section,
+    .krono-updater-container #statusBox,
+    .krono-updater-container #updateSection {
+        box-sizing: border-box;
+    }
+    .krono-updater-container .browser-compatibility {
+        margin: 0 0 32px 0;
+        padding: 24px;
+        background: var(--color-gray-50);
+        border-radius: 0;
+        border: 1px solid var(--color-gray-200);
+    }
+    .krono-updater-container .browser-compatibility h3 {
+        margin: 0 0 16px 0;
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: var(--color-gray-900);
+        text-align: center;
+    }
+    .krono-updater-container .compatibility-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+        margin-bottom: 16px;
+    }
+    @media (max-width: 768px) {
+        .krono-updater-container .compatibility-grid {
+            grid-template-columns: 1fr;
+            gap: 16px;
+        }
+        .krono-updater-container .browser-compatibility {
+            padding: 16px;
+        }
+        .krono-updater-container .browser-compatibility h3 {
+            font-size: 1.1rem;
+        }
+    }
+    @media (max-width: 480px) {
+        .krono-updater-container .compatibility-grid {
+            gap: 12px;
+        }
+        .krono-updater-container .browser-compatibility {
+            padding: 12px;
+        }
+        .krono-updater-container .supported-browsers,
+        .krono-updater-container .unsupported-browsers {
+            padding: 12px;
+        }
+    }
+    .krono-updater-container .supported-browsers,
+    .krono-updater-container .unsupported-browsers {
+        padding: 16px;
+        border-radius: 0;
+        background: var(--color-white);
+        border: 1px solid var(--color-gray-200);
+    }
+    .krono-updater-container .supported-browsers h4 {
+        margin: 0 0 12px 0;
+        font-size: 1rem;
+        font-weight: 600;
+        color: var(--color-gray-900);
+    }
+    .krono-updater-container .unsupported-browsers h4 {
+        margin: 0 0 12px 0;
+        font-size: 1rem;
+        font-weight: 600;
+        color: var(--color-gray-900);
+    }
+    .krono-updater-container .supported-browsers ul,
+    .krono-updater-container .unsupported-browsers ul {
+        margin: 0;
+        padding: 0 0 0 16px;
+        list-style-type: disc;
+    }
+    .krono-updater-container .supported-browsers li,
+    .krono-updater-container .unsupported-browsers li {
+        margin-bottom: 4px;
+        font-size: 0.875rem;
+        color: var(--color-gray-700);
+    }
+    .krono-updater-container .compatibility-note {
+        padding: 12px 16px;
+        background: var(--color-gray-100);
+        border: 1px solid var(--color-gray-200);
+        border-radius: 0;
+        font-size: 0.875rem;
+        color: var(--color-gray-900);
+        text-align: center;
+    }
+    .krono-updater-container .notes-section {
+        margin-top: 24px;
+        padding: 24px;
+        background: var(--color-gray-50);
+        border-radius: 0;
+        border: 1px solid var(--color-gray-200);
+        max-width: 846px;
+        margin-left: auto;
+        margin-right: auto;
+    }
+    .krono-updater-container .notes-section h3 {
+        margin: 0 0 16px 0;
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: var(--color-gray-900);
+    }
+    .krono-updater-container .notes-list {
+        margin: 0;
+        padding: 0 0 0 20px;
+        list-style-type: disc;
+    }
+    .krono-updater-container .notes-list li {
+        margin-bottom: 12px;
+        font-size: 0.8rem;
+        color: var(--color-gray-600);
+        line-height: 1.4;
+    }
+    .krono-updater-container .notes-link {
+        color: var(--color-purple-500);
+        text-decoration: underline;
+        font-weight: 600;
+    }
+    .krono-updater-container .notes-link:hover {
+        color: var(--color-purple-600);
+        text-decoration: underline;
+    }
+    /* Mobile notes section improvements */
+    @media (max-width: 768px) {
+        .krono-updater-container .notes-section {
+            padding: 16px;
+        }
+        .krono-updater-container .notes-section h3 {
+            font-size: 1rem;
+            margin-bottom: 14px;
+        }
+        .krono-updater-container .notes-list {
+            padding-left: 16px;
+        }
+        .krono-updater-container .notes-list li {
+            font-size: 0.75rem;
+            margin-bottom: 10px;
+            line-height: 1.3;
+        }
+    }
+    @media (max-width: 480px) {
+        .krono-updater-container .notes-section {
+            padding: 12px;
+        }
+        .krono-updater-container .notes
+           -section h3 {
+           font-size: 0.9rem;
+        }
+        .krono-updater-container .notes-list li {
+           font-size: 0.7rem;
+           margin-bottom: 8px;
+        }
+    }   
+    /* Blinking animation for Windows arrow */
+    @keyframes blink-arrow {
+        0%, 50% {
+            opacity: 1;
+            color: var(--color-purple-500);
+        }
+        51%, 100% {
+            opacity: 1;
+            color: var(--color-black);
+        }
+    }
+    .krono-updater-container .accordion-arrow.blink {
+        animation: blink-arrow 0.5s ease-in-out infinite;
+    }
+    /* Stop blinking when expanded */
+    .krono-updater-container .accordion-arrow.blink.expanded {
+        animation: none;
+        color: var(--color-purple-500);
+    }
+    /* Accordion slide animation - only on desktop */
+    @media (min-width: 769px) {
+        .krono-updater-container .accordion-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.6s cubic-bezier(0.4, 0, 0.2, 1), padding 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+            padding-top: 0;
+            padding-bottom: 0;
+        }
+        .krono-updater-container .accordion-content.opening {
+            max-height: 1200px; /* Large enough to accommodate content */
+            padding-top: 24px;
+            padding-bottom: 24px;
+        }
+        .krono-updater-container .accordion-header {
+            transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+    }
+</style>
