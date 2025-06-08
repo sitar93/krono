@@ -1,4 +1,3 @@
- \ 
 #include "mode_swing.h"
 #include "drivers/io.h"
 #include "modes.h" // For mode_context_t

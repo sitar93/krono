@@ -9,7 +9,7 @@
 // --- Output Pulse ---
 
 /** @brief Default duration (ms) for all output pulses (1A/B and Mode Outputs). */
-#define DEFAULT_PULSE_DURATION_MS 1
+#define DEFAULT_PULSE_DURATION_MS 5
 
 // --- Calculation Mode Persistence Configuration ---
 
