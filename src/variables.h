@@ -9,7 +9,7 @@
 // --- Output Pulse ---
 
 /** @brief Default duration (ms) for all output pulses (1A/B and Mode Outputs). */
-#define DEFAULT_PULSE_DURATION_MS 5
+#define DEFAULT_PULSE_DURATION_MS 10
 
 // --- Calculation Mode Persistence Configuration ---
 
@@ -48,7 +48,7 @@
 #define CALC_SWAP_MAX_PRESS_DURATION_MS 500
 
 /** @brief Minimum time (ms) between consecutive Calc Mode Swaps to prevent bounce. */
-#define CALC_SWAP_COOLDOWN_MS 50
+#define CALC_SWAP_COOLDOWN_MS 100
 
 // --- State Persistence Timing ---
 
