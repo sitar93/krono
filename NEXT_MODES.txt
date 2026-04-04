@@ -11,20 +11,36 @@
 8. MODE_LOGIC         (8 blinks)
 9. MODE_PHASING       (9 blinks)
 10. MODE_CHAOS        (10 blinks)
-11. MODE_METAMODAL    (11 blinks)
-12. MODE_RESONANCE    (12 blinks)
-13. MODE_HOLOGRAPHIC  (13 blinks)
-14. MODE_DNA          (14 blinks)
-15. MODE_QUANTUM      (15 blinks)
-16. MODE_PSYCHEDELIC  (16 blinks)
-17. MODE_RETRO        (17 blinks)
-18. MODE_MICROTIMING  (18 blinks)
-19. MODE_ODDEVEN      (19 blinks)
-20. MODE_RANDOM       (20 blinks)
-21. MODE_SEQUENCER    (21 blinks)
+11. MODE_BINARY       (11 blinks)
+12. MODE_METAMODAL    (12 blinks)
+13. MODE_RESONANCE    (13 blinks)
+14. MODE_HOLOGRAPHIC  (14 blinks)
+15. MODE_DNA          (15 blinks)
+16. MODE_QUANTUM      (16 blinks)
+17. MODE_PSYCHEDELIC  (17 blinks)
+18. MODE_RETRO        (18 blinks)
+19. MODE_MICROTIMING  (19 blinks)
+20. MODE_ODDEVEN      (20 blinks)
+21. MODE_RANDOM       (21 blinks)
+22. MODE_SEQUENCER    (22 blinks)
 
 
---- 11. META-MODAL MODE ---
+--- 11. BINARY MODE (IMPLEMENTED) ---
+
+Concept: 16-step binary pattern sequencer with hardcoded patterns
+Implementation:
+    Group A (2A-6A): 5 channels of 16-step binary patterns ( Techno patterns)
+    Group B (2B-6B): 5 channels of different 16-step binary patterns
+    Bank: Determined by calc mode (Normal = Bank 0, Swapped = Bank 1)
+    Swap: Press MOD to toggle bank (syncs to steps 0, 3, 7, 11, 15)
+    Sequences: 5 different presets (Techno, Industrial, etc.)
+
+Parameters:
+    - binary_bank: 0 or 1 (saved/loaded)
+    - binary_sequence: 0-4 (saved/loaded)
+
+
+--- 12. META-MODAL MODE ---
 
 Concept: Mode that controls other modes
 Implementation:

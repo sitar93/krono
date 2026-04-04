@@ -329,9 +329,12 @@ platformio device monitor
 - Group A = X threshold, Group B = Y/Z threshold
 
 ### BINARY
-- 16 step pattern
-- Bank swap on calc_mode
-- Hardcoded patterns in array
+- 16 step binary pattern sequencer (Mode 11)
+- Outputs 2A-6A and 2B-6B (10 channels)
+- 5 different sequence presets (0-4)
+- Bank swap: Bank 0 = calc_mode NORMAL, Bank 1 = calc_mode SWAPPED
+- Swap triggers on MOD press, syncs to steps 0, 3, 7, 11, 15
+- Bank and sequence are saved/loaded
 
 ---
 
@@ -347,6 +350,8 @@ typedef struct {
     uint32_t chaos_mode_divisor;
     uint8_t swing_profile_index_A;
     uint8_t swing_profile_index_B;
+    uint8_t binary_bank;           // Bank for BINARY mode (0 or 1)
+    uint8_t binary_sequence;       // Sequence for BINARY mode (0-4)
     uint32_t checksum;
 } krono_state_t;
 ```
