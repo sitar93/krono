@@ -22,6 +22,7 @@ typedef enum {
     MODE_LOGIC,             // 8: Logic Gates
     MODE_PHASING,           // 9: Phasing Clocks
     MODE_CHAOS,             // 10: Deterministic Chaos
+    MODE_BINARY,            // 11: Binary Pattern Sequencer
     NUM_OPERATIONAL_MODES // Keep this last for counting
 } operational_mode_t;
 
@@ -114,5 +115,10 @@ void mode_phasing_reset(void);
 void mode_chaos_init(void);
 void mode_chaos_update(const mode_context_t* context);
 void mode_chaos_reset(void);
+
+// Mode Binary Pattern Sequencer
+void mode_binary_init(void);
+void mode_binary_update(const mode_context_t* context);
+void mode_binary_reset(void);
 
 #endif // MODES_H

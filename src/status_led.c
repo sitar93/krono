@@ -76,7 +76,8 @@ void status_led_update(uint32_t current_time_ms) {
         case MODE_POLYRHYTHM:    blinks = 7; break;
         case MODE_LOGIC:         blinks = 8; break;
         case MODE_PHASING:       blinks = 9; break;
-        case MODE_CHAOS:         blinks = 10; break; // <-- Added Chaos mode
+        case MODE_CHAOS:         blinks = 10; break;
+        case MODE_BINARY:        blinks = 11; break; // <-- Added Chaos mode
         default: blinks = 1; break; // Safe default for unknown modes
     }
     uint32_t on_duration = STATUS_LED_BASE_INTERVAL_MS;

@@ -12,6 +12,7 @@
 #include "mode_logic.h"
 #include "mode_phasing.h"
 #include "mode_chaos.h"
+#include "mode_binary.h"
 
 // Function pointer table for mode reset functions
 static void (*mode_reset_functions[NUM_OPERATIONAL_MODES])(void) = {
@@ -24,7 +25,8 @@ static void (*mode_reset_functions[NUM_OPERATIONAL_MODES])(void) = {
     mode_polyrhythm_reset,
     mode_logic_reset,
     mode_phasing_reset,
-    mode_chaos_reset
+    mode_chaos_reset,
+    mode_binary_reset
 };
 
 // Function pointer table for mode init functions
@@ -38,7 +40,8 @@ static void (*mode_init_functions[NUM_OPERATIONAL_MODES])(void) = {
     mode_polyrhythm_init,
     mode_logic_init,
     mode_phasing_init,
-    mode_chaos_init
+    mode_chaos_init,
+    mode_binary_init
 };
 
 

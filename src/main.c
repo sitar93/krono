@@ -19,6 +19,7 @@
 
 #include "modes/mode_chaos.h" 
 #include "modes/mode_swing.h" // Needed for NUM_SWING_PROFILES
+#include "modes/mode_binary.h"
 
 // --- Global State (Static to this file) ---
 krono_state_t current_state; 
@@ -109,7 +110,7 @@ static void on_op_mode_change(uint8_t mode_clicks) {
 static void on_calc_mode_change(void) {
     g_current_calc_mode = (g_current_calc_mode == CALC_MODE_NORMAL) ? CALC_MODE_SWAPPED : CALC_MODE_NORMAL;
     io_cancel_all_timed_pulses();
-    clock_manager_sync_flags(true); // Questa chiamata resettava la modalità (es. indici swing)
+    clock_manager_sync_flags(true); // This call resets the mode (e.g. swing indices)
     clock_manager_set_calc_mode(g_current_calc_mode); 
 
 #if SAVE_CALC_MODE_PER_OP_MODE
@@ -190,6 +191,12 @@ static void system_init(void) {
         if (current_state.swing_profile_index_B >= NUM_SWING_PROFILES) {
             current_state.swing_profile_index_B = 3; 
         }
+        if (current_state.binary_bank > 1) {
+            current_state.binary_bank = 0;
+        }
+        if (current_state.binary_sequence >= NUM_BINARY_SUBMODES) {
+            current_state.binary_sequence = 0;
+        }
 
         clock_manager_init(g_current_op_mode, current_state.tempo_interval);
 
@@ -198,6 +205,12 @@ static void system_init(void) {
         }
         if (g_current_op_mode == MODE_SWING) {
             mode_swing_set_profile_indices(current_state.swing_profile_index_A, current_state.swing_profile_index_B);
+        }
+        if (g_current_op_mode == MODE_BINARY) {
+            mode_binary_set_bank(current_state.binary_bank);
+            mode_binary_set_sequence(current_state.binary_sequence);
+            g_current_calc_mode = current_state.binary_bank;
+            clock_manager_set_calc_mode(g_current_calc_mode);
         }
 
     } else {
@@ -263,12 +276,21 @@ static void save_current_state(void) {
         state_to_save.swing_profile_index_A = current_state.swing_profile_index_A; 
         state_to_save.swing_profile_index_B = current_state.swing_profile_index_B; 
     }
+
+    if (g_current_op_mode == MODE_BINARY) {
+        state_to_save.binary_bank = g_current_calc_mode;
+        state_to_save.binary_sequence = mode_binary_get_sequence();
+    } else {
+        state_to_save.binary_bank = current_state.binary_bank;
+        state_to_save.binary_sequence = current_state.binary_sequence;
+    }
+
     state_to_save.checksum = 0; 
     state_to_save.checksum = persistence_calculate_checksum(&state_to_save);
 
     bool save_successful = persistence_save_state(&state_to_save);
 
-    clock_manager_sync_flags(true); 
+    clock_manager_sync_flags(false); 
     clock_manager_set_calc_mode(g_current_calc_mode); 
 
     if (save_successful) {

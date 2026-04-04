@@ -56,6 +56,7 @@ Uses PlatformIO.
   - **`mode_logic.c`/`h`**: Implements Logic mode.
   - **`mode_phasing.c`/`h`**: Implements Phasing mode.
   - **`mode_chaos.c`/`h`**: Implements Chaos mode.
+  - **`mode_binary.c`/`h`**: Implements Binary Pattern Sequencer mode (Mode 11).
 - **`src/util/`**: Utility functions.
   - **`delay.c`/`h`**: Provides simple blocking delay functions (`delay_ms`).
 - **`src/input_handler.c`/`h`**: Manages user inputs.
@@ -127,6 +128,7 @@ KRONO is designed to be the rhythmic center of your setup. Here's how to get sta
     *   **Logic Mode:** Outputs 2-6 are logic functions (AND, OR, XOR, NAND, XNOR) of the Tap (PA0) and Mode (PA1) inputs.
     *   **Phasing Mode:** Outputs 2-6 generate pulses phased relative to the main clock (1A/1B), with different phase shifts.
     *   **Chaos Mode:** Outputs 2-6 generate rhythmic patterns based on chaotic logistic maps. The chaos divisor is saved with the module state.
+    *   **Binary Mode:** Outputs 2A-6A and 2B-6B (10 outputs total) generate hardcoded 16-step binary patterns. Bank A/B toggle via MOD button (Calc Mode Swap).
 6.  **Swap Groups (Calculation Swap):**
     *   **Button:** Briefly press *only* the Mode/Swap button (PA1) when *not* in the mode change sequence.
     *   **Gate:** Send a HIGH gate signal to PB4.

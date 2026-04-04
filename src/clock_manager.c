@@ -12,6 +12,7 @@
 #include "modes/mode_polyrhythm.h"
 #include "modes/mode_phasing.h"
 #include "modes/mode_chaos.h"
+#include "modes/mode_binary.h"
 
 #include "main_constants.h"  // For DEFAULT_PULSE_DURATION_MS
 #include "util/delay.h"      // For millis()
@@ -48,7 +49,8 @@ static void (*mode_update_functions[NUM_OPERATIONAL_MODES])(const mode_context_t
     [MODE_POLYRHYTHM]    = mode_polyrhythm_update,
     [MODE_LOGIC]         = mode_logic_update,
     [MODE_PHASING]       = mode_phasing_update,
-    [MODE_CHAOS]         = mode_chaos_update // <-- Added Chaos mode update
+    [MODE_CHAOS]         = mode_chaos_update,
+    [MODE_BINARY]        = mode_binary_update
 };
 
 // --- Public Function Implementations ---
@@ -176,4 +178,8 @@ void clock_manager_sync_flags(bool is_calc_mode_change) {
 
 void clock_manager_set_calc_mode(calculation_mode_t new_mode) {
     current_mode_context.calc_mode = new_mode;
+}
+
+void clock_manager_clear_calc_mode_changed(void) {
+    calc_mode_just_changed = false;
 }

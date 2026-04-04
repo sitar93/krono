@@ -55,5 +55,10 @@ void clock_manager_sync_flags(bool is_calc_mode_change);
  */
 void clock_manager_set_calc_mode(calculation_mode_t new_mode);
 
+/**
+ * @brief Clears the calc_mode_changed flag to prevent unwanted bank swaps.
+ */
+void clock_manager_clear_calc_mode_changed();
+
 
 #endif // CLOCK_MANAGER_H

@@ -1,6 +1,6 @@
 # AGENTS.md - KRONO Firmware Development Guide
 
-This file provides guidelines for agentic coding agents operating in this repository.
+Guidelines for agentic coding agents in this repository.
 
 ## Project Overview
 
@@ -10,17 +10,17 @@ KRONO is a multi-modal rhythm generator firmware for STM32F401CE/RC microcontrol
 
 ## Build / Test Commands
 
-### Build (Compile)
+### Build
 ```bash
 platformio run -e blackpill_f411ce
 ```
-Compiles the source code and creates `firmware.bin` in `.pio/build/blackpill_f411ce/`.
+Creates `firmware.bin` in `.pio/build/blackpill_f411ce/`.
 
 ### Upload (DFU)
 ```bash
 platformio run -e blackpill_f411ce --target upload
 ```
-Uploads firmware via DFU protocol. Board must be in DFU mode (hold BOOT0, press NRST, release BOOT0).
+Board must be in DFU mode (hold BOOT0, press NRST, release BOOT0).
 
 ### Clean Build
 ```bash
@@ -35,14 +35,8 @@ platformio device monitor
 View device output (requires separate USB-Serial adapter).
 
 ### Testing
-- **No automated tests exist**. All testing is manual.
-- After code changes: build, upload to hardware, and observe behavior.
-- No single test command available.
-
-### Linting/Formatting
-- **No lint/format tools configured**.
-- Manually use `clang-format` if available (K&R style, 4 spaces).
-- Always run `platformio run -e blackpill_f411ce` after edits to verify compilation.
+- **No automated tests** - all testing is manual
+- After changes: build, upload, observe hardware behavior
 
 ---
 
@@ -54,9 +48,8 @@ View device output (requires separate USB-Serial adapter).
 
 ### Formatting
 - **Indentation:** 4 spaces (no tabs)
-- **Style:** K&R variant (braces on same line, multi-line function arguments indented)
-- **Line length:** Max 120 characters preferred
-- **Newlines:** Unix-style (`\n`)
+- **Style:** K&R variant (braces on same line)
+- **Line length:** Max 120 characters
 
 Example:
 ```c
@@ -74,61 +67,32 @@ void example_function(int argument_one,
 ### Naming Conventions
 - **Functions/variables:** `snake_case` (e.g., `clock_manager_set_tempo`)
 - **Macros/constants:** `UPPER_SNAKE_CASE` (e.g., `MAX_OUTPUTS`)
-- **Types (typedef):** `snake_case_t` or `snake_case` (e.g., `operational_mode_t`)
-- **Enums:** Prefix with relevant category (e.g., `MODE_DEFAULT`, `CALC_MODE_NORMAL`)
-- **Prefixes:**
-  - Driver functions: `io_`, `tap_`, `rtc_`, `persistence_`, `ext_clock_`
-  - Module functions: `input_handler_`, `status_led_`, `mode_`, `clock_manager_`
+- **Types (typedef):** `snake_case_t` (e.g., `operational_mode_t`)
+- **Enums:** Prefix with category (e.g., `MODE_DEFAULT`)
+- **Prefixes:** Driver: `io_`, `tap_`, `rtc_`, `persistence_`, `ext_clock_`; Module: `input_handler_`, `status_led_`, `mode_`, `clock_manager_`
 
-### Includes
-- **Local headers:** Use `"path/to/local.h"` (e.g., `"drivers/io.h"`)
-- **Framework headers:** Use `<libopencm3/stm32/...>` or `<libopencm3/cm3/...>`
-- **Standard headers:** Use `<stdbool.h>`, `<stdint.h>`, etc.
-
-Order:
+### Includes Order
 1. Standard C headers (`<stdbool.h>`, `<stdint.h>`)
-2. libopencm3 framework headers (`<libopencm3/...>`)
-3. Local project headers (`"drivers/io.h"`, etc.)
+2. libopencm3 (`<libopencm3/stm32/...>`, `<libopencm3/cm3/...>`)
+3. Local project headers (`"drivers/io.h"`)
 
 ### Types
-- Use standard fixed-width types: `uint32_t`, `int16_t`, etc.
-- Use `bool` for boolean values (include `<stdbool.h>`)
-- Use `enum` for related constants
-- Use `struct` for compound data types
-- Use `typedef` for opaque types or function pointers
+- Use fixed-width types: `uint32_t`, `int16_t`, etc.
+- Use `bool` for boolean (include `<stdbool.h>`)
+- Use `enum` for related constants, `struct` for compound data
 
 ### Error Handling
-- Return values: `bool` for success/failure, `int` for error codes
-- No exception handling (C does not support it)
-- Validate inputs at function boundaries
-- Use defensive programming: check bounds, validate pointers
+- Return `bool` for success/failure, `int` for error codes
+- Validate inputs, check bounds, validate pointers
 
 ### Comments
-- **API/Function documentation:** Doxygen style `/** ... */`
-- **Inline explanations:** `//` single-line comments
-- **Section headers:** `// --- Section Name ---` for logical divisions
-- Always comment in English
+- **API docs:** Doxygen `/** ... */`
+- **Inline:** `//` single-line
+- **Section headers:** `// --- Section Name ---`
 
-Example:
-```c
-/**
- * @brief Initialize the clock manager with default tempo.
- * @param initial_tempo_ms Initial tempo interval in milliseconds.
- * @return true if initialization successful, false otherwise.
- */
-bool clock_manager_init(uint32_t initial_tempo_ms);
-```
-
-### Global Variables
-- Minimize global variables
-- Use `static` for file-scope globals
-- Use `volatile` for variables shared between ISR and main code
-- Prefix globals with `g_` only when necessary for disambiguation
-
-### Code Organization
-- Header files (`.h`): Declarations, documentation, macros, types
-- Implementation files (`.c`): Definitions
-- One header + one source file per logical module
+### Globals
+- Minimize globals; use `static` for file-scope
+- Use `volatile` for ISR-shared variables
 
 ---
 
@@ -136,46 +100,45 @@ bool clock_manager_init(uint32_t initial_tempo_ms);
 
 ```
 src/
-├── main.c                    # Core orchestrator, main loop, state management
-├── main_constants.h         # Fundamental constants (pins, timing)
+├── main.c                    # Core orchestrator, main loop
+├── main_constants.h         # Pin definitions, timing constants
 ├── variables.h              # Tunable parameters
-├── input_handler.c/h        # User input processing, debounce
+├── input_handler.c/h        # User input, debounce
 ├── clock_manager.c/h        # Clock generation, mode dispatch
 ├── status_led.c/h           # Status LED control
-├── drivers/                 # Hardware abstraction layer
-│   ├── io.c/h              # GPIO, outputs, timer pulses
-│   ├── tap.c/h             # Tap tempo input (EXTI)
-│   ├── ext_clock.c/h       # External clock input (EXTI)
-│   ├── persistence.c/h     # Flash memory save/load
+├── drivers/                 # Hardware abstraction
+│   ├── io.c/h              # GPIO, outputs
+│   ├── tap.c/h             # Tap tempo (EXTI)
+│   ├── ext_clock.c/h       # External clock (EXTI)
+│   ├── persistence.c/h     # Flash save/load
 │   └── rtc.c/h             # RTC backup registers
 ├── modes/                   # Mode-specific rhythm logic
-│   ├── modes.h             # Common interface (mode_context_t, signatures)
-│   ├── mode_default.c/h    # Default mode
-│   ├── mode_euclidean.c/h  # Euclidean rhythms
-│   ├── mode_chaos.c/h      # Chaos mode
-│   ├── mode_swing.c/h      # Swing mode
+│   ├── modes.h             # Common interface
+│   ├── mode_default.c/h    # Multiplication/Division
+│   ├── mode_euclidean.c/h # Euclidean rhythms
+│   ├── mode_musical.c/h    # Musical ratios
 │   └── ...                 # Other modes
 └── util/
-    └── delay.c/h           # Utility delay functions
+    └── delay.c/h           # Delay utilities
 ```
 
 ---
 
 ## Development Workflow
 
-1. **Make changes** to source files in `src/`
-2. **Build** with `platformio run -e blackpill_f411ce`
-3. **Fix compilation errors** (pay attention to warnings)
-4. **Upload** to hardware: `platformio run -e blackpill_f411ce --target upload`
-5. **Test manually** by observing hardware behavior
+1. Edit source files in `src/`
+2. Build: `platformio run -e blackpill_f411ce`
+3. Fix compilation errors (watch warnings)
+4. Upload: `platformio run -e blackpill_f411ce --target upload`
+5. Test manually on hardware
 
 ---
 
 ## Important Notes
 
-- No automated tests - all verification is manual hardware testing
-- No lint/format tools - match existing code style manually
-- SWD debugging likely unavailable (PB3/PB4 pins used for other functions)
+- No automated tests - manual hardware testing only
+- No lint/format tools configured
+- Use `millis()` for timing (SysTick handler)
+- Keep ISR callbacks short - defer processing to main loop
 - Save state to Flash periodically or on mode changes
-- Use `millis()` for timing (provided by SysTick handler)
-- Keep ISR callbacks short - do minimal work, defer processing to main loop
+- Compiler flags: `-Wall -Wextra -Wno-unused-parameter -O1`

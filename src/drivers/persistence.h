@@ -21,6 +21,8 @@ typedef struct {
     uint32_t chaos_mode_divisor; // Specific divisor setting for Chaos mode
     uint8_t swing_profile_index_A; // Active swing profile index for MODE_SWING Group A
     uint8_t swing_profile_index_B; // Active swing profile index for MODE_SWING Group B
+    uint8_t binary_bank;           // Active bank for MODE_BINARY (0 or 1)
+    uint8_t binary_sequence;       // Active sequence for MODE_BINARY
     uint32_t checksum;           // Simple checksum for validation
 } krono_state_t;
 

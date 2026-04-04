@@ -34,7 +34,7 @@ This file provides guidelines for developing the KRONO module firmware using Pla
 - See `README.md` for a detailed breakdown. Key areas:
 - `src/main.c`: Core orchestrator, main loop, state management, callbacks.
 - `src/drivers/`: Hardware Abstraction Layer (GPIO, Tap Input, Persistence, RTC, Ext Clock).
-- `src/modes/`: Mode-specific logic (Default, Euclidean, etc.). `modes.h` defines the common interface (`mode_context_t`, function signatures).
+- `src/modes/`: Mode-specific logic (Default, Euclidean, Musical, Probabilistic, Sequential, Swing, Polyrhythm, Logic, Phasing, Chaos, Binary, etc.). `modes.h` defines the common interface (`mode_context_t`, function signatures).
 - `src/util/`: Utility functions (e.g., `delay.c`).
 - `src/input_handler.c/h`: User input processing (Tap, Mode Switch, Calc Swap), debounce logic, callback invocation.
 - `src/status_led.c/h`: Status LED control based on mode.

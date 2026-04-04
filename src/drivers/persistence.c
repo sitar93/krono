@@ -69,6 +69,8 @@ bool persistence_load_state(krono_state_t *state) {
     }
     if (state->swing_profile_index_A >= NUM_SWING_PROFILES) state->swing_profile_index_A = 3;
     if (state->swing_profile_index_B >= NUM_SWING_PROFILES) state->swing_profile_index_B = 3;
+    if (state->binary_bank > 1) state->binary_bank = 0;
+    if (state->binary_sequence > 4) state->binary_sequence = 0; // NUM_BINARY_SUBMODES = 5
 
 #if SAVE_CALC_MODE_PER_OP_MODE
     for (int i = 0; i < NUM_OPERATIONAL_MODES; i++) {
