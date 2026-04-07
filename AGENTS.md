@@ -142,3 +142,14 @@ src/
 - Keep ISR callbacks short - defer processing to main loop
 - Save state to Flash periodically or on mode changes
 - Compiler flags: `-Wall -Wextra -Wno-unused-parameter -O1`
+
+---
+
+## Cursor Cloud specific instructions
+
+- **No lint or automated tests**: This is an embedded firmware project with no linting tools and no automated test suite. The only verification is a successful build (`platformio run -e blackpill_f411ce`). After any code change, always run the build to confirm it compiles cleanly.
+- **PATH**: PlatformIO is installed via `pip install --user platformio` into `~/.local/bin`. Ensure `$HOME/.local/bin` is on `PATH` (added to `~/.bashrc`).
+- **First build downloads toolchain**: The first `platformio run` after a clean environment downloads the `ststm32` platform, `libopencm3` framework, and `arm-none-eabi-gcc` toolchain (~24s). Subsequent builds are much faster (~3s) since artifacts are cached in `~/.platformio/`.
+- **Build artifacts**: After a successful build, firmware files are renamed by post-build scripts to `krono_code_vX.X.X.{bin,elf,hex}` in `.pio/build/blackpill_f411ce/`. The version is extracted from `CHANGELOG.txt`.
+- **No runtime services**: This is a cross-compiled firmware project targeting STM32. There is no server, web app, or local service to start. The "hello world" equivalent is a successful build producing the `.bin`, `.elf`, and `.hex` artifacts.
+- **Upload and serial monitor require physical hardware**: `--target upload` (DFU) and `platformio device monitor` are not usable in a cloud VM without a connected STM32 board.
