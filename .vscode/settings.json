@@ -2,5 +2,8 @@
     "files.associations": {
         "gpio.h": "c"
     },
-    "C_Cpp.errorSquiggles": "disabled"
+    "C_Cpp.errorSquiggles": "disabled",
+    "platformio-ide.useBuiltinPIOCore": false,
+    "platformio-ide.customPATH": "C:\\Users\\Federico\\.platformio\\penv\\Scripts;C:\\Users\\Federico\\.platformio\\penv;${env:PATH}",
+    "platformio-ide.coreExecutable": "C:\\Users\\Federico\\.platformio\\penv\\Scripts\\platformio.exe"
 }

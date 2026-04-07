@@ -1,4 +1,5 @@
 #include "input_handler.h"
+#include "input_tempo.h"
 #include "drivers/tap.h"
 #include "drivers/io.h"
 #include "drivers/ext_clock.h"
@@ -12,8 +13,7 @@
 #include <libopencm3/stm32/exti.h>
 #include <libopencm3/stm32/syscfg.h>
 #include <libopencm3/cm3/nvic.h>
-#include <stdlib.h> 
-#include <limits.h> 
+#include <stddef.h> // NULL
 
 #define GATE_SWAP_DEBOUNCE_MS 10 
 #define MODE_SWITCH_PA1_DEBOUNCE_MS 50 
@@ -22,7 +22,6 @@
 
 // --- Forward declarations --- 
 static void input_pins_init(void);
-static void handle_taps_for_tempo(void);
 static void handle_button_calc_mode_swap(void);
 static void handle_op_mode_sm(uint32_t now, bool tap_pressed_now, bool mod_pressed_now_raw);
 static void reset_op_mode_sm_vars(void); 
@@ -35,11 +34,6 @@ static input_calc_mode_change_callback_t calc_mode_change_cb = NULL;
 static input_binary_sequence_change_callback_t binary_sequence_change_cb = NULL;
 static input_save_request_callback_t save_request_cb = NULL; 
 static input_aux_led_blink_request_callback_t aux_led_blink_request_cb = NULL; 
-
-// Tap Tempo
-static uint32_t tap_intervals[NUM_INTERVALS_FOR_AVG] = {0};
-static uint8_t tap_interval_index = 0;
-static uint32_t last_reported_tap_tempo_interval = 0;
 
 // External Clock State
 static bool external_clock_active = false;
@@ -87,11 +81,6 @@ static volatile uint32_t last_gate_swap_isr_time = 0;
 
 // --- Helper Functions ---
 
-static void reset_tap_calculation_vars(void) {
-    tap_interval_index = 0;
-    for (int i = 0; i < NUM_INTERVALS_FOR_AVG; i++) tap_intervals[i] = 0;
-}
-
 static void reset_op_mode_sm_vars(void) {
     current_op_mode_sm_state = INPUT_SM_IDLE;
     tap_press_start_time = 0;
@@ -114,38 +103,6 @@ static void reset_op_mode_sm_vars(void) {
 static void reset_calc_swap_sm_vars(void) {
     current_calc_swap_sm_state = CALC_SWAP_SM_IDLE;
     calc_swap_mode_press_start_time = 0;
-}
-
-static void handle_taps_for_tempo(void) {
-    if (tap_detected()) {
-        uint32_t interval = tap_get_interval();
-        uint32_t now_for_tap_event = millis(); 
-        
-        if (interval >= MIN_INTERVAL && interval <= MAX_INTERVAL) {
-            tap_intervals[tap_interval_index++] = interval;
-            if (tap_interval_index >= NUM_INTERVALS_FOR_AVG) {
-                uint64_t interval_sum = 0;
-                uint32_t min_val = UINT32_MAX, max_val = 0;
-                for (int i = 0; i < NUM_INTERVALS_FOR_AVG; i++) {
-                    interval_sum += tap_intervals[i];
-                    if (tap_intervals[i] < min_val) min_val = tap_intervals[i];
-                    if (tap_intervals[i] > max_val) max_val = tap_intervals[i];
-                }
-                if ((max_val - min_val) <= MAX_INTERVAL_DIFFERENCE) {
-                    uint32_t avg_interval = (uint32_t)(interval_sum / NUM_INTERVALS_FOR_AVG);
-                    if (avg_interval < MIN_INTERVAL) avg_interval = MIN_INTERVAL;
-                    if (avg_interval > MAX_INTERVAL) avg_interval = MAX_INTERVAL;
-                    if (tempo_change_cb && avg_interval != last_reported_tap_tempo_interval && avg_interval > 0) {
-                        tempo_change_cb(avg_interval, false, now_for_tap_event); 
-                        last_reported_tap_tempo_interval = avg_interval;
-                    }
-                 }
-                reset_tap_calculation_vars();
-            }
-        } else {
-            reset_tap_calculation_vars();
-        }
-    }
 }
 
 static void handle_button_calc_mode_swap(void) {
@@ -216,7 +173,7 @@ static void handle_op_mode_sm(uint32_t now, bool tap_pressed_now, bool mod_is_pr
                 current_op_mode_sm_state = INPUT_SM_TAP_HELD_QUALIFYING;
                 tap_press_start_time = now;
                 if (tap_detected()) { (void)tap_get_interval(); } 
-                reset_tap_calculation_vars(); 
+                input_tempo_reset_calculation();
                 pa1_mod_change_last_debounced_state = mod_is_pressed_raw; 
                 pa1_mod_change_last_event_time = now; 
             }
@@ -353,9 +310,9 @@ void input_handler_init(
     save_request_cb = save_req_cb_param; 
     aux_led_blink_request_cb = aux_blink_cb_param; 
 
-    input_pins_init(); 
+    input_pins_init();
+    input_tempo_init(tempo_change_cb);
     last_calc_swap_trigger_time = 0;
-    last_reported_tap_tempo_interval = 0;
     ext_gate_swap_requested = false;
     external_clock_active = false;
     last_valid_external_clock_interval = 0;
@@ -398,14 +355,14 @@ void input_handler_update(void) {
         }
         external_clock_active = true;
         last_valid_external_clock_interval = validated_interval;
-        reset_tap_calculation_vars(); 
+        input_tempo_reset_calculation();
 
         if (current_calc_swap_sm_state != CALC_SWAP_SM_IDLE) {
             reset_calc_swap_sm_vars();
         }
     } else if (ext_clock_has_timed_out(now)) {
-        if (external_clock_active) { 
-            external_clock_active = false; 
+        if (external_clock_active) {
+            external_clock_active = false;
             if (tempo_change_cb) {
                 uint32_t new_internal_tempo_to_set = DEFAULT_TEMPO_INTERVAL;
 
@@ -413,17 +370,17 @@ void input_handler_update(void) {
                     last_valid_external_clock_interval >= MIN_INTERVAL &&
                     last_valid_external_clock_interval <= MAX_INTERVAL) {
                     new_internal_tempo_to_set = last_valid_external_clock_interval;
-                } else if (last_reported_tap_tempo_interval > 0 &&
-                           last_reported_tap_tempo_interval >= MIN_INTERVAL &&
-                           last_reported_tap_tempo_interval <= MAX_INTERVAL) {
-                    new_internal_tempo_to_set = last_reported_tap_tempo_interval;
+                } else {
+                    uint32_t last_tap = input_tempo_get_last_reported_interval();
+                    if (last_tap > 0 && last_tap >= MIN_INTERVAL && last_tap <= MAX_INTERVAL) {
+                        new_internal_tempo_to_set = last_tap;
+                    }
                 }
 
-                last_reported_tap_tempo_interval = new_internal_tempo_to_set;
-                
-                tempo_change_cb(new_internal_tempo_to_set, false, now); 
+                input_tempo_set_last_reported_interval(new_internal_tempo_to_set);
+                tempo_change_cb(new_internal_tempo_to_set, false, now);
             }
-            last_valid_external_clock_interval = 0; 
+            last_valid_external_clock_interval = 0;
         }
     }
 
@@ -432,7 +389,7 @@ void input_handler_update(void) {
     }
 
     handle_button_calc_mode_swap();
-    handle_taps_for_tempo();
+    input_tempo_handle_tap_event();
 
     if (ext_gate_swap_requested) {
         // CV Gate Swap (PB4) triggers calc_mode_change or binary bank change depending on mode

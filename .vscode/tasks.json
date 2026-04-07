@@ -1,0 +1,64 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "PlatformIO: Build (blackpill_f411ce)",
+            "type": "shell",
+            "command": "& \"C:\\Users\\Federico\\.platformio\\penv\\Scripts\\platformio.exe\" run -e blackpill_f411ce",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "PlatformIO: Upload (blackpill_f411ce)",
+            "type": "shell",
+            "command": "& \"C:\\Users\\Federico\\.platformio\\penv\\Scripts\\platformio.exe\" run -e blackpill_f411ce --target upload",
+            "group": "none",
+            "problemMatcher": []
+        },
+        {
+            "label": "PlatformIO: Clean (blackpill_f411ce)",
+            "type": "shell",
+            "command": "& \"C:\\Users\\Federico\\.platformio\\penv\\Scripts\\platformio.exe\" run -e blackpill_f411ce --target clean",
+            "group": "none",
+            "problemMatcher": []
+        },
+        {
+            "label": "VCV: Build Krono Plugin (MSYS2)",
+            "type": "shell",
+            "command": "& \"${workspaceFolder}\\vcv-rack-plugin\\scripts\\build_windows.ps1\" -RackDir \"D:\\Files\\VCV\\Rack-SDK\"",
+            "group": "build",
+            "problemMatcher": []
+        },
+        {
+            "label": "VCV: Build+Install Krono Plugin (MSYS2)",
+            "type": "shell",
+            "command": "& \"${workspaceFolder}\\vcv-rack-plugin\\scripts\\build_windows.ps1\" -RackDir \"D:\\Files\\VCV\\Rack-SDK\" -InstallToRack",
+            "group": "none",
+            "problemMatcher": []
+        },
+        {
+            "label": "VCV: Launch Rack",
+            "type": "shell",
+            "command": "& \"${workspaceFolder}\\vcv-rack-plugin\\scripts\\run_rack.ps1\"",
+            "group": "none",
+            "problemMatcher": []
+        },
+        {
+            "label": "VCV: Check Krono Install",
+            "type": "shell",
+            "command": "& \"${workspaceFolder}\\vcv-rack-plugin\\scripts\\check_krono_install.ps1\"",
+            "group": "none",
+            "problemMatcher": []
+        },
+        {
+            "label": "VCV: Build+Install+Launch Rack",
+            "type": "shell",
+            "command": "& \"${workspaceFolder}\\vcv-rack-plugin\\scripts\\build_windows.ps1\" -RackDir \"D:\\Files\\VCV\\Rack-SDK\" -InstallToRack; & \"${workspaceFolder}\\vcv-rack-plugin\\scripts\\check_krono_install.ps1\"; & \"${workspaceFolder}\\vcv-rack-plugin\\scripts\\run_rack.ps1\"",
+            "group": "none",
+            "problemMatcher": []
+        }
+    ]
+}

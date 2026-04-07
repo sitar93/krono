@@ -1,144 +1,181 @@
-# AGENTS.md - KRONO Firmware Development Guide
+# AGENTS.md — KRONO firmware (contributors & coding agents)
 
-Guidelines for agentic coding agents in this repository.
-
-## Project Overview
-
-KRONO is a multi-modal rhythm generator firmware for STM32F401CE/RC microcontrollers (Black Pill boards). Built with PlatformIO and libopencm3 framework.
+This file is the **single technical reference** for anyone modifying the codebase (humans or agents). End-user documentation lives in **`README.md`**. Version history is in **`CHANGELOG.txt`**.
 
 ---
 
-## Build / Test Commands
+## Quick orientation
 
-### Build
+| Topic | Where |
+|--------|--------|
+| Usage, hardware, modes (user) | `README.md` |
+| What changed per release | `CHANGELOG.txt` |
+| License | `LICENSE.txt` |
+| Build, style, architecture, debug | This file (`AGENTS.md`) |
+
+---
+
+## Project overview
+
+KRONO is a multi-modal rhythm generator firmware for **STM32F411CE** (Black Pill / Krono PCB), built with **PlatformIO** and **libopencm3**. Target environment: `blackpill_f411ce`.
+
+---
+
+## Build / test commands
+
 ```bash
 platformio run -e blackpill_f411ce
-```
-Creates `firmware.bin` in `.pio/build/blackpill_f411ce/`.
-
-### Upload (DFU)
-```bash
 platformio run -e blackpill_f411ce --target upload
-```
-Board must be in DFU mode (hold BOOT0, press NRST, release BOOT0).
-
-### Clean Build
-```bash
 platformio run -e blackpill_f411ce --target clean
-```
-Removes `.pio` directory. Use when encountering strange build errors.
-
-### Serial Monitor
-```bash
 platformio device monitor
 ```
-View device output (requires separate USB-Serial adapter).
 
-### Testing
-- **No automated tests** - all testing is manual
-- After changes: build, upload, observe hardware behavior
+- Output: `.pio/build/blackpill_f411ce/` (`firmware.bin`, renamed post-build per `CHANGELOG.txt` / project scripts).
+- **No automated tests** — verify on hardware after upload.
 
----
+### Upload (DFU)
 
-## Code Style Guidelines
+1. Hold **BOOT0** (often near USB).
+2. Press and release **NRST** (reset).
+3. Release **BOOT0**.
+4. Device should enumerate as STM32 bootloader; run upload command.
 
-### Language & Framework
-- **Language:** C (C11 standard)
-- **Framework:** libopencm3 for STM32 hardware abstraction
-
-### Formatting
-- **Indentation:** 4 spaces (no tabs)
-- **Style:** K&R variant (braces on same line)
-- **Line length:** Max 120 characters
-
-Example:
-```c
-void example_function(int argument_one,
-                     int argument_two)
-{
-    if (condition) {
-        do_something();
-    } else {
-        do_something_else();
-    }
-}
-```
-
-### Naming Conventions
-- **Functions/variables:** `snake_case` (e.g., `clock_manager_set_tempo`)
-- **Macros/constants:** `UPPER_SNAKE_CASE` (e.g., `MAX_OUTPUTS`)
-- **Types (typedef):** `snake_case_t` (e.g., `operational_mode_t`)
-- **Enums:** Prefix with category (e.g., `MODE_DEFAULT`)
-- **Prefixes:** Driver: `io_`, `tap_`, `rtc_`, `persistence_`, `ext_clock_`; Module: `input_handler_`, `status_led_`, `mode_`, `clock_manager_`
-
-### Includes Order
-1. Standard C headers (`<stdbool.h>`, `<stdint.h>`)
-2. libopencm3 (`<libopencm3/stm32/...>`, `<libopencm3/cm3/...>`)
-3. Local project headers (`"drivers/io.h"`)
-
-### Types
-- Use fixed-width types: `uint32_t`, `int16_t`, etc.
-- Use `bool` for boolean (include `<stdbool.h>`)
-- Use `enum` for related constants, `struct` for compound data
-
-### Error Handling
-- Return `bool` for success/failure, `int` for error codes
-- Validate inputs, check bounds, validate pointers
-
-### Comments
-- **API docs:** Doxygen `/** ... */`
-- **Inline:** `//` single-line
-- **Section headers:** `// --- Section Name ---`
-
-### Globals
-- Minimize globals; use `static` for file-scope
-- Use `volatile` for ISR-shared variables
+**Windows:** If DFU fails, ensure `dfu-util` is available; Zadig/WinUSB may be needed for `STM32 BOOTLOADER`.
 
 ---
 
-## Codebase Structure
+## Code style
+
+- **Repository language:** All source code, comments, and project documentation files (`README.md`, `AGENTS.md`, `CHANGELOG.txt`, etc.) are written in **English**, even when discussion happens in other languages.
+- **Language:** C (C11).
+- **Indentation:** 4 spaces, no tabs.
+- **Braces:** K&R (opening brace on same line).
+- **Line length:** max 120 characters.
+- **Names:** `snake_case` functions/variables; `UPPER_SNAKE_CASE` macros; `snake_case_t` typedefs.
+- **Prefixes:** drivers `io_`, `tap_`, `rtc_`, `persistence_`, `ext_clock_`; modules `input_handler_`, `status_led_`, `mode_`, `clock_manager_`.
+- **Includes:** stdlib → libopencm3 → local `"headers.h"`.
+- **Comments:** Doxygen `/** */` for APIs; `//` inline; `// --- Section ---` for blocks.
+- **ISR:** keep short; defer work to the main loop.
+- **Lint/format:** not configured; match existing files.
+
+---
+
+## Repository layout (firmware)
 
 ```
 src/
-├── main.c                    # Core orchestrator, main loop
-├── main_constants.h         # Pin definitions, timing constants
-├── variables.h              # Tunable parameters
-├── input_handler.c/h        # User input, debounce
-├── clock_manager.c/h        # Clock generation, mode dispatch
-├── status_led.c/h           # Status LED control
-├── drivers/                 # Hardware abstraction
-│   ├── io.c/h              # GPIO, outputs
-│   ├── tap.c/h             # Tap tempo (EXTI)
-│   ├── ext_clock.c/h       # External clock (EXTI)
-│   ├── persistence.c/h     # Flash save/load
-│   └── rtc.c/h             # RTC backup registers
-├── modes/                   # Mode-specific rhythm logic
-│   ├── modes.h             # Common interface
-│   ├── mode_default.c/h    # Multiplication/Division
-│   ├── mode_euclidean.c/h # Euclidean rhythms
-│   ├── mode_musical.c/h    # Musical ratios
-│   └── ...                 # Other modes
+├── main.c                 # Orchestrator, callbacks, main loop, millis(); save/load glue for mode fields
+├── main_constants.h       # Timing bounds, shared defines
+├── variables.h            # Tunable parameters
+├── input_handler.c/h      # Inputs, tap averaging, op-mode SM, ext clock, tempo callback dispatch
+├── clock_manager.c/h      # F1 pulse, mode_context, mode dispatch
+├── status_led.c/h
+├── drivers/               # io, tap, ext_clock, persistence, rtc
+├── modes/                 # mode_*.c, modes.c, modes.h
 └── util/
-    └── delay.c/h           # Delay utilities
+platformio.ini
 ```
 
 ---
 
-## Development Workflow
+## Runtime data flow (tempo)
 
-1. Edit source files in `src/`
-2. Build: `platformio run -e blackpill_f411ce`
-3. Fix compilation errors (watch warnings)
-4. Upload: `platformio run -e blackpill_f411ce --target upload`
-5. Test manually on hardware
+1. `tap.c` — EXTI0 on PA0: intervals → `tap_detected()` / `tap_get_interval()`.
+2. `input_handler.c` — collects `NUM_INTERVALS_FOR_AVG` intervals; on stable consensus calls tempo callback; routes tap vs external clock; op-mode SM can drain tap events.
+3. `main.c` — `on_tap_tempo_change` → `clock_manager_set_internal_tempo()`.
+4. `clock_manager.c` — schedules F1; passes `mode_context_t` to active `mode_*_update()`.
+
+**Current tap policy:** tempo update after the **4th tap** (three intervals collected when `NUM_INTERVALS_FOR_AVG == 3`). **Internal tap** updates interval only (`clock_manager_set_internal_tempo`); **external clock** aligns phase and emits an immediate F1 pulse.
+
+**External clock:** `ext_clock.c` validated intervals override tap; timeout falls back to internal tempo.
 
 ---
 
-## Important Notes
+## Important implementation notes
 
-- No automated tests - manual hardware testing only
-- No lint/format tools configured
-- Use `millis()` for timing (SysTick handler)
-- Keep ISR callbacks short - defer processing to main loop
-- Save state to Flash periodically or on mode changes
-- Compiler flags: `-Wall -Wextra -Wno-unused-parameter -O1`
+- `millis()` lives in `main.c` (SysTick 1 ms).
+- Modes should prefer `context->current_time_ms` over raw `millis()` where timing must align with the clock manager.
+- Mode-specific persisted fields are applied in `main.c` / `save_current_state()` (chaos divisor, swing indices, binary bank) alongside `krono_state_t`.
+- Persistence: `krono_state_t` in `persistence.h`; flash address `0x08060000`. Save is triggered via input-handler save path (see `README.md`).
+
+---
+
+## Adding a new operational mode (checklist)
+
+1. Add `MODE_*` to `operational_mode_t` in `modes.h` (before `NUM_OPERATIONAL_MODES`).
+2. Add `mode_*_init/update/reset` in new `mode_*.c` / `mode_*.h`, declared in `modes.h`.
+3. Register in `modes.c` (init/reset tables).
+4. Register update in `clock_manager.c` (`mode_update_functions[]`).
+5. Update `status_led.c` blink count for the new mode.
+6. Extend `krono_state_t` and `main.c` load/save paths if the mode needs new persisted fields.
+7. Update user-facing `README.md` (modes section).
+8. Document the release in `CHANGELOG.txt`.
+9. Build: `platformio run -e blackpill_f411ce`.
+
+---
+
+## Debug playbook (tempo / input)
+
+**Boundaries:** capture (ISR / `tap.c`) → validate (`input_handler.c`) → propagate (callbacks in `main.c`) → apply (`clock_manager.c`).
+
+**Symptoms:**
+
+- Tempo changes “too early” → `NUM_INTERVALS_FOR_AVG`, `reset_tap_calculation_vars()` / external-clock reset paths in `input_handler.c`.
+- Phase feels wrong → timestamp passed into `clock_manager_set_internal_tempo()`.
+- Tap ignored after gestures → op-mode SM draining `tap_detected()` in non-idle states.
+- External clock issues → `external_clock_active` gating in `input_handler_update()`.
+
+**Manual checks:** steady taps → lock on 4th tap; ext clock priority; disconnect ext clock → fallback.
+
+---
+
+## Cursor / VS Code / PlatformIO IDE
+
+If the PlatformIO sidebar stays on “initializing”, point the extension at the existing Core, e.g. in `.vscode/settings.json`:
+
+```json
+{
+    "platformio-ide.useBuiltinPIOCore": false,
+    "platformio-ide.customPATH": "C:\\Users\\<you>\\.platformio\\penv\\Scripts;C:\\Users\\<you>\\.platformio\\penv;${env:PATH}",
+    "platformio-ide.coreExecutable": "C:\\Users\\<you>\\.platformio\\penv\\Scripts\\platformio.exe"
+}
+```
+
+Use **Tasks: Run Task** for `PlatformIO: Build/Upload/Clean` if defined in `.vscode/tasks.json`. Keybindings belong in **User Keyboard Shortcuts (JSON)**, not always in the project.
+
+---
+
+## Release build notes
+
+- Prefer a clean build before release: `clean` then `run`.
+- Artifacts under `.pio/build/blackpill_f411ce/` (including renamed `krono_code_v*.*.*.bin` per post-build scripts).
+- Version line is driven from `CHANGELOG.txt` in this project’s build helpers.
+
+---
+
+## Optional: PlatformIO Core in a Python venv (Linux/macOS)
+
+```bash
+python3 -m venv ~/platformio_venv
+source ~/platformio_venv/bin/activate
+pip install -U pip platformio
+platformio --version
+```
+
+Add `~/platformio_venv/bin` to `PATH` if desired.
+
+---
+
+## Future mode ideas (not implemented)
+
+Historical brainstorming lived in removed `NEXT_MODES.txt`. New concepts should be tracked in design notes or tickets before implementation.
+
+---
+
+## Agent workflow reminder
+
+1. Edit `src/`.
+2. `platformio run -e blackpill_f411ce`.
+3. Fix warnings where reasonable.
+4. Flash and test on hardware.
+5. Update `CHANGELOG.txt` and `README.md` when behavior or user-visible details change.

@@ -26,6 +26,12 @@ bool tap_detected(void);
 uint32_t tap_get_interval(void);
 
 /**
+ * @brief Millisecond timestamp of the last tap edge that produced the current interval.
+ * Call immediately after tap_detected() returns true (before the next tap overwrites state).
+ */
+uint32_t tap_get_last_press_time_ms(void);
+
+/**
  * @brief Returns the raw state of the tap button (PA0).
  * @return true if button is pressed (PA0 is LOW), false otherwise.
  */
@@ -36,8 +42,9 @@ bool tap_is_button_pressed(void);
  * Resets the internal tap sequence tracking if timed out.
  * Call periodically (e.g., from SysTick).
  * @param current_time_ms Current system time in milliseconds.
+ * @return true if the in-progress tap sequence was cleared.
  */
-void tap_check_timeout(uint32_t current_time_ms);
+bool tap_check_timeout(uint32_t current_time_ms);
 
 
 #ifdef __cplusplus

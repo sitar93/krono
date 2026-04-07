@@ -4,9 +4,24 @@
 #include <stdint.h> // Needed for uint32_t
 #include "variables.h" // Include tunable parameters
 
+/** Core CPU clock (Hz). Must match rcc_clock_setup_pll in main.c system_init(). */
+#define KRONO_CPU_HZ 84000000u
+#define KRONO_CPU_CYCLES_PER_MS (KRONO_CPU_HZ / 1000u)
+
 // --- Timing & Tap ---
-#define NUM_INTERVALS_FOR_AVG 3 // We need 3 intervals for a stable average
-#define MAX_INTERVAL_DIFFERENCE 3000 // Max difference allowed between intervals in ms
+/** Intervals counted after the first tap (4 taps => 3 intervals) before first BPM lock. */
+#define TAP_LOCK_INTERVAL_SAMPLES 3
+#define NUM_INTERVALS_FOR_AVG TAP_LOCK_INTERVAL_SAMPLES
+/** Legacy cap on spread (ms); also enforced together with relative spread below. */
+#define MAX_INTERVAL_DIFFERENCE 3000
+/** Max (max-min) spread for lock-in, as % of median interval (whichever is stricter vs MAX_INTERVAL_DIFFERENCE). */
+#define TAP_INTERVAL_SPREAD_PERCENT 18
+#define TAP_INTERVAL_SPREAD_MIN_MS 10
+/** EMA divisor for refinement after lock (new tap weight = 1/TAP_REFINE_EMA_DIVISOR). */
+#define TAP_REFINE_EMA_DIVISOR 8
+/** Ignore interval sample for averaging if it deviates from current estimate by more than this fraction (still phase-sync). */
+#define TAP_REFINE_OUTLIER_FRAC_NUM 1
+#define TAP_REFINE_OUTLIER_FRAC_DEN 4
 #define MIN_INTERVAL 33       // Corresponds to approx. 1818 BPM (60000ms / 33ms)
 #define MAX_INTERVAL 6000 // Corresponds to 10 BPM (60000ms / 6000ms = 10 BPM)
 #define MIN_CLOCK_INTERVAL 10 // Minimum interval for generated clocks (affects max frequency)

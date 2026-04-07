@@ -1,10 +1,10 @@
 Import("env")
 import os
 import glob
-print("!!! hex_build.py: SCRIPT LOADED BY SCONS !!!") # Print globale
+print("!!! hex_build.py: SCRIPT LOADED BY SCONS !!!")  # Module-level log when SCons loads this script
 
 def post_build_hex(source, target, env):
-    print(">>> hex_build.py: post_build_hex CALLED") # Print all'inizio della funzione
+    print(">>> hex_build.py: post_build_hex CALLED")  # Log at start of post-build hook
     try:
         from os.path import join
         build_dir = env.subst("$BUILD_DIR")
@@ -40,4 +40,4 @@ def post_build_hex(source, target, env):
         print(">>> hex_build.py: post_build_hex END")
 
 env.AddPostAction("buildprog", post_build_hex)
-print("!!! hex_build.py: AddPostAction for post_build_hex REGISTERED !!!") # Print dopo la registrazione
+print("!!! hex_build.py: AddPostAction for post_build_hex REGISTERED !!!")  # Log after registering the post-build action

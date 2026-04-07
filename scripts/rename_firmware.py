@@ -1,10 +1,10 @@
 Import("env")
 import os
 import shutil
-print("!!! rename_firmware.py: SCRIPT LOADED BY SCONS !!!") # Print globale
+print("!!! rename_firmware.py: SCRIPT LOADED BY SCONS !!!")  # Module-level log when SCons loads this script
 
 def rename_firmware(source, target, env):
-    print(">>> rename_firmware.py: rename_firmware CALLED") # Print all'inizio della funzione
+    print(">>> rename_firmware.py: rename_firmware CALLED")  # Log at start of post-build hook
     try:
         build_dir = env.subst("$BUILD_DIR")
         version = env["VERSION"]
@@ -29,4 +29,4 @@ def rename_firmware(source, target, env):
         print(">>> rename_firmware.py: rename_firmware END")
 
 env.AddPostAction("buildprog", rename_firmware)
-print("!!! rename_firmware.py: AddPostAction for rename_firmware REGISTERED !!!") # Print dopo la registrazione
+print("!!! rename_firmware.py: AddPostAction for rename_firmware REGISTERED !!!")  # Log after registering the post-build action

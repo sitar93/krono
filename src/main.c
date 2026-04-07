@@ -12,14 +12,14 @@
 #include "drivers/ext_clock.h" 
 #include "drivers/tap.h"
 #include "modes/modes.h" 
-#include "input_handler.h" 
-#include "clock_manager.h" 
-#include "status_led.h" 
-#include "variables.h" 
-#include "main_constants.h" 
+#include "input_handler.h"
+#include "input_tempo.h"
+#include "clock_manager.h"
+#include "status_led.h"
+#include "variables.h"
+#include "main_constants.h"
+#include "mode_state.h"
 
-#include "modes/mode_chaos.h" 
-#include "modes/mode_swing.h" // Needed for NUM_SWING_PROFILES
 #include "modes/mode_binary.h"
 
 // --- Global State (Static to this file) ---
@@ -89,12 +89,7 @@ static void on_op_mode_change(uint8_t mode_clicks) {
         status_led_set_override(false, false); 
         clock_manager_set_calc_mode(g_current_calc_mode); 
 
-        if (g_current_op_mode == MODE_CHAOS) {
-            mode_chaos_set_divisor(current_state.chaos_mode_divisor);
-        }
-        if (g_current_op_mode == MODE_SWING) {
-            mode_swing_set_profile_indices(current_state.swing_profile_index_A, current_state.swing_profile_index_B);
-        }
+        mode_state_apply_runtime(g_current_op_mode, &current_state);
 
         input_handler_update_main_op_mode(g_current_op_mode); 
 
@@ -108,7 +103,7 @@ static void on_op_mode_change(uint8_t mode_clicks) {
     }
 }
 
-// Ripristinata versione di on_calc_mode_change che chiamava clock_manager_sync_flags(true)
+// on_calc_mode_change: call clock_manager_sync_flags(true) to reset mode timing (e.g. swing).
 static void on_calc_mode_change(void) {
     g_current_calc_mode = (g_current_calc_mode == CALC_MODE_NORMAL) ? CALC_MODE_SWAPPED : CALC_MODE_NORMAL;
     io_cancel_all_timed_pulses();
@@ -196,32 +191,10 @@ static void system_init(void) {
         if (current_state.tempo_interval < MIN_INTERVAL || current_state.tempo_interval > MAX_INTERVAL) {
             current_state.tempo_interval = DEFAULT_TEMPO_INTERVAL;
         }
-        if (current_state.chaos_mode_divisor < CHAOS_DIVISOR_MIN ||
-            current_state.chaos_mode_divisor > CHAOS_DIVISOR_DEFAULT || 
-            (current_state.chaos_mode_divisor % CHAOS_DIVISOR_STEP != 0)) {
-             current_state.chaos_mode_divisor = CHAOS_DIVISOR_DEFAULT;
-        }
-        if (current_state.swing_profile_index_A >= NUM_SWING_PROFILES) { 
-            current_state.swing_profile_index_A = 3; 
-        }
-        if (current_state.swing_profile_index_B >= NUM_SWING_PROFILES) {
-            current_state.swing_profile_index_B = 3; 
-        }
-        if (current_state.binary_bank >= NUM_BINARY_BANKS) {
-            current_state.binary_bank = 0;
-        }
+        mode_state_validate(&current_state);
 
         clock_manager_init(g_current_op_mode, current_state.tempo_interval);
-
-        if (g_current_op_mode == MODE_CHAOS) {
-             mode_chaos_set_divisor(current_state.chaos_mode_divisor);
-        }
-        if (g_current_op_mode == MODE_SWING) {
-            mode_swing_set_profile_indices(current_state.swing_profile_index_A, current_state.swing_profile_index_B);
-        }
-        if (g_current_op_mode == MODE_BINARY) {
-            mode_binary_set_bank(current_state.binary_bank);
-        }
+        mode_state_apply_runtime(g_current_op_mode, &current_state);
 
     } else {
         g_current_op_mode = current_state.op_mode; 
@@ -235,10 +208,9 @@ static void system_init(void) {
         current_state.swing_profile_index_A = 3;
         current_state.swing_profile_index_B = 3;
 
-        clock_manager_init(g_current_op_mode, current_state.tempo_interval); 
-        if (g_current_op_mode == MODE_SWING) {
-            mode_swing_set_profile_indices(current_state.swing_profile_index_A, current_state.swing_profile_index_B);
-        }
+        mode_state_validate(&current_state);
+        clock_manager_init(g_current_op_mode, current_state.tempo_interval);
+        mode_state_apply_runtime(g_current_op_mode, &current_state);
     }
 
     input_handler_init(
@@ -276,24 +248,7 @@ static void save_current_state(void) {
     }
 #endif
 
-    if (g_current_op_mode == MODE_CHAOS) {
-         state_to_save.chaos_mode_divisor = mode_chaos_get_divisor();
-    } else {
-         state_to_save.chaos_mode_divisor = current_state.chaos_mode_divisor; 
-    }
-
-    if (g_current_op_mode == MODE_SWING) {
-        mode_swing_get_profile_indices(&state_to_save.swing_profile_index_A, &state_to_save.swing_profile_index_B);
-    } else {
-        state_to_save.swing_profile_index_A = current_state.swing_profile_index_A; 
-        state_to_save.swing_profile_index_B = current_state.swing_profile_index_B; 
-    }
-
-    if (g_current_op_mode == MODE_BINARY) {
-        state_to_save.binary_bank = mode_binary_get_bank();
-    } else {
-        state_to_save.binary_bank = current_state.binary_bank;
-    }
+    mode_state_capture_for_save(g_current_op_mode, &current_state, &state_to_save);
     state_to_save.binary_sequence = 0; // Not used anymore
 
     state_to_save.checksum = 0; 
@@ -318,7 +273,9 @@ int main(void) {
 
     while (1) {
         uint32_t now = millis();
-        tap_check_timeout(now);
+        if (tap_check_timeout(now)) {
+            input_tempo_reset_calculation();
+        }
         input_handler_update();
         clock_manager_update(); 
         status_led_update(now); 

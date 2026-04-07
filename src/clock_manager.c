@@ -85,10 +85,10 @@ void clock_manager_set_internal_tempo(uint32_t interval_ms, bool is_external_clo
             generate_f1_pulse(); // Generate immediate pulse to align
             // The next pulse will be scheduled based on the new active_tempo_interval_ms from this event_timestamp_ms
         } else {
-            // For tap tempo or internal changes, we might not want to reset phase immediately,
-            // or reset it to 'now' if that's the desired behavior.
-            // Current behavior: just update interval, phase continues unless a sync_flags is called.
-            // If phase reset is needed for tap: last_f1_pulse_time_ms = event_timestamp_ms (which would be 'now' from input_handler for tap)
+            // Tap tempo: lock phase to the player's last tap; pulse 1A/1B on that beat.
+            last_f1_pulse_time_ms = event_timestamp_ms;
+            f1_tick_counter = 0;
+            generate_f1_pulse();
         }
     }
 }
@@ -121,12 +121,17 @@ void clock_manager_update(void) {
     // No longer check external clock events here. Tempo is managed via callbacks from input_handler.
 
     // --- Run Internal Timer ---
-    // Check if the internal timer is due based on the *current* active interval
-    if ((now - last_f1_pulse_time_ms >= active_tempo_interval_ms)) {
+    // Catch up missed beats in one frame (slow main loop) without drifting tempo.
+    if (active_tempo_interval_ms > 0 && (now - last_f1_pulse_time_ms) >= active_tempo_interval_ms) {
+        uint32_t late = now - last_f1_pulse_time_ms;
+        uint32_t n = late / active_tempo_interval_ms;
+        if (n < 1) {
+            n = 1;
+        }
+        last_f1_pulse_time_ms += n * active_tempo_interval_ms;
         generate_f1_pulse();
-        last_f1_pulse_time_ms += active_tempo_interval_ms; // Use += to preserve phase
         f1_tick_this_cycle = true;
-        f1_tick_counter++;
+        f1_tick_counter += n;
     }
 
     // --- Update Mode Context ---
