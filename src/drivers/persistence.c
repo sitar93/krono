@@ -2,6 +2,7 @@
 #include "main_constants.h"
 #include "modes/mode_chaos.h" // For CHAOS_DIVISOR_DEFAULT, CHAOS_DIVISOR_MIN, CHAOS_DIVISOR_STEP
 #include "modes/mode_swing.h" // For NUM_SWING_PROFILES 
+#include "modes/mode_binary.h" // For NUM_BINARY_BANKS
 
 #include <libopencm3/stm32/flash.h>
 #include <string.h> // For memcpy and memset
@@ -69,8 +70,7 @@ bool persistence_load_state(krono_state_t *state) {
     }
     if (state->swing_profile_index_A >= NUM_SWING_PROFILES) state->swing_profile_index_A = 3;
     if (state->swing_profile_index_B >= NUM_SWING_PROFILES) state->swing_profile_index_B = 3;
-    if (state->binary_bank > 1) state->binary_bank = 0;
-    if (state->binary_sequence > 4) state->binary_sequence = 0; // NUM_BINARY_SUBMODES = 5
+    if (state->binary_bank >= NUM_BINARY_BANKS) state->binary_bank = 0;
 
 #if SAVE_CALC_MODE_PER_OP_MODE
     for (int i = 0; i < NUM_OPERATIONAL_MODES; i++) {

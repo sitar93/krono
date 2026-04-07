@@ -329,12 +329,14 @@ platformio device monitor
 - Group A = X threshold, Group B = Y/Z threshold
 
 ### BINARY
-- 16 step binary pattern sequencer (Mode 11)
+- 16-step binary pattern sequencer (Mode 11)
 - Outputs 2A-6A and 2B-6B (10 channels)
-- 5 different sequence presets (0-4)
-- Bank swap: Bank 0 = calc_mode NORMAL, Bank 1 = calc_mode SWAPPED
-- Swap triggers on MOD press, syncs to steps 0, 3, 7, 11, 15
-- Bank and sequence are saved/loaded
+- Output mapping: 2=Kick, 3=Snare, 4=Clap, 5=Open HH, 6=Closed HH
+- Group A and B have slightly different patterns for variation
+- 10 unique banks (0-9) with different styles (Techno, Industrial, Trance, Minimal, Breakbeat, etc.)
+- Sequencer runs at 4x speed relative to main clock (16 steps in 4 clock cycles)
+- MOD button press or CV gate (PB4) cycles through the 10 banks
+- Bank change applies at end of current 16-step cycle
 
 ---
 
@@ -350,8 +352,8 @@ typedef struct {
     uint32_t chaos_mode_divisor;
     uint8_t swing_profile_index_A;
     uint8_t swing_profile_index_B;
-    uint8_t binary_bank;           // Bank for BINARY mode (0 or 1)
-    uint8_t binary_sequence;       // Sequence for BINARY mode (0-4)
+    uint8_t binary_bank;           // Bank for BINARY mode (0-9)
+    uint8_t binary_sequence;      // Reserved (set to 0)
     uint32_t checksum;
 } krono_state_t;
 ```

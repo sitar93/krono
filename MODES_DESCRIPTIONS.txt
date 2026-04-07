@@ -60,10 +60,27 @@ This file describes the operation of each mode implemented in the KRONO module.
     - Swap (PA1): Decrements the divisor 'N' for all outputs (from CHAOS_DIVISOR_DEFAULT down to CHAOS_DIVISOR_MIN with step CHAOS_DIVISOR_STEP), wrapping back to default if the minimum is reached. The divisor state is saved/loaded.
 
 11. MODE_BINARY (16-Step Binary Pattern Sequencer)
-    - Concept: A 16-step sequencer with hardcoded binary patterns for each output.
-    - Group A (Outputs 2A-6A): 5 channels of 16-step binary patterns.
-    - Group B (Outputs 2B-6B): 5 channels of different 16-step binary patterns.
-    - Bank Selection: The calc mode determines which bank is active (Bank 0 for Normal, Bank 1 for Swapped).
-    - Bank Swap: Triggered automatically on MOD press (Calc Mode Swap), syncing to specific steps (0, 3, 7, 11, 15).
-    - Patterns: 5 different sequence presets selectable via internal parameters.
-    - Swap (PA1): Triggers the bank swap. The bank state is saved/loaded.
+     - Concept: A 16-step sequencer with hardcoded binary patterns for each output.
+     - Speed: The sequencer runs at 4x speed relative to the main clock (16 steps complete in 4 clock cycles of 1A/1B).
+     - Output Mapping:
+       * Output 2 (2A/2B): Kick
+       * Output 3 (3A/3B): Snare
+       * Output 4 (4A/4B): Clap
+       * Output 5 (5A/5B): Open Hi-Hat
+       * Output 6 (6A/6B): Closed Hi-Hat
+     - Group A vs Group B: Both groups play the same drum sounds, but with slightly different patterns for variation (creates interesting polyrhythmic effects).
+     - Bank Selection: 10 unique banks (0-9) with different styles:
+       * Bank 0: Basic Techno
+       * Bank 1: Techno variant
+       * Bank 2: Industrial
+       * Bank 3: Industrial variant
+       * Bank 4: Trance
+       * Bank 5: Trance variant
+       * Bank 6: Minimal
+       * Bank 7: Minimal variant
+       * Bank 8: Breakbeat
+       * Bank 9: Breakbeat variant
+     - Bank Change: Press MOD button or send CV gate to PB4 to cycle to the next bank.
+     - Bank Change Timing: The bank change is applied at the end of the current 16-step cycle (seamless transition).
+     - State Saving: The current bank is saved to Flash memory via the standard mode change save procedure.
+     - Swap (PA1): Cycles through the 10 banks. The current bank is saved/loaded.

@@ -124,7 +124,7 @@ void clock_manager_update(void) {
     // Check if the internal timer is due based on the *current* active interval
     if ((now - last_f1_pulse_time_ms >= active_tempo_interval_ms)) {
         generate_f1_pulse();
-        last_f1_pulse_time_ms = now; // Could also use += interval for drift correction
+        last_f1_pulse_time_ms += active_tempo_interval_ms; // Use += to preserve phase
         f1_tick_this_cycle = true;
         f1_tick_counter++;
     }

@@ -10,6 +10,7 @@
 #include "drivers/io.h" 
 #include "drivers/persistence.h" 
 #include "drivers/ext_clock.h" 
+#include "drivers/tap.h"
 #include "modes/modes.h" 
 #include "input_handler.h" 
 #include "clock_manager.h" 
@@ -53,6 +54,7 @@ static void save_current_state(void);
 static void on_tap_tempo_change(uint32_t new_interval_ms, bool is_external_clock, uint32_t event_timestamp_ms);
 static void on_op_mode_change(uint8_t mode_clicks);
 static void on_calc_mode_change(void);
+static void on_binary_sequence_change(void);
 static void on_save_request_from_input_handler(void); 
 static void on_aux_led_blink_request_from_input_handler(void); 
 
@@ -123,6 +125,20 @@ static void on_calc_mode_change(void) {
     status_led_pa3_blink_end_time = millis() + STATUS_LED_PA3_BLINK_DURATION_MS;
 }
 
+static void on_binary_sequence_change(void) {
+    // MOD press only cycles banks in BINARY mode
+    if (g_current_op_mode == MODE_BINARY) {
+        uint8_t current_bank = mode_binary_get_bank();
+        uint8_t next_bank = (current_bank + 1) % NUM_BINARY_BANKS;
+        
+        mode_binary_set_bank(next_bank);
+        current_state.binary_bank = next_bank;
+        
+        set_output(JACK_OUT_AUX_LED_PA3, true);
+        status_led_pa3_blink_end_time = millis() + STATUS_LED_PA3_BLINK_DURATION_MS;
+    }
+}
+
 static void on_save_request_from_input_handler(void) {
     state_changed_for_saving = true;
 }
@@ -191,11 +207,8 @@ static void system_init(void) {
         if (current_state.swing_profile_index_B >= NUM_SWING_PROFILES) {
             current_state.swing_profile_index_B = 3; 
         }
-        if (current_state.binary_bank > 1) {
+        if (current_state.binary_bank >= NUM_BINARY_BANKS) {
             current_state.binary_bank = 0;
-        }
-        if (current_state.binary_sequence >= NUM_BINARY_SUBMODES) {
-            current_state.binary_sequence = 0;
         }
 
         clock_manager_init(g_current_op_mode, current_state.tempo_interval);
@@ -208,14 +221,12 @@ static void system_init(void) {
         }
         if (g_current_op_mode == MODE_BINARY) {
             mode_binary_set_bank(current_state.binary_bank);
-            mode_binary_set_sequence(current_state.binary_sequence);
-            g_current_calc_mode = current_state.binary_bank;
-            clock_manager_set_calc_mode(g_current_calc_mode);
         }
 
     } else {
         g_current_op_mode = current_state.op_mode; 
-        g_current_calc_mode = CALC_MODE_NORMAL; 
+        g_current_calc_mode = CALC_MODE_NORMAL;
+        current_state.tempo_interval = DEFAULT_TEMPO_INTERVAL;
 #if SAVE_CALC_MODE_PER_OP_MODE
          if (g_current_op_mode < NUM_OPERATIONAL_MODES) { 
             g_current_calc_mode = current_state.calc_mode_per_op_mode[g_current_op_mode];
@@ -234,6 +245,7 @@ static void system_init(void) {
         on_tap_tempo_change,
         on_op_mode_change,
         on_calc_mode_change,
+        on_binary_sequence_change,
         on_save_request_from_input_handler,
         on_aux_led_blink_request_from_input_handler 
     );
@@ -278,12 +290,11 @@ static void save_current_state(void) {
     }
 
     if (g_current_op_mode == MODE_BINARY) {
-        state_to_save.binary_bank = g_current_calc_mode;
-        state_to_save.binary_sequence = mode_binary_get_sequence();
+        state_to_save.binary_bank = mode_binary_get_bank();
     } else {
         state_to_save.binary_bank = current_state.binary_bank;
-        state_to_save.binary_sequence = current_state.binary_sequence;
     }
+    state_to_save.binary_sequence = 0; // Not used anymore
 
     state_to_save.checksum = 0; 
     state_to_save.checksum = persistence_calculate_checksum(&state_to_save);
@@ -307,6 +318,7 @@ int main(void) {
 
     while (1) {
         uint32_t now = millis();
+        tap_check_timeout(now);
         input_handler_update();
         clock_manager_update(); 
         status_led_update(now); 

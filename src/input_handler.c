@@ -32,6 +32,7 @@ static void reset_calc_swap_sm_vars(void);
 static input_tempo_change_callback_t tempo_change_cb = NULL;
 static input_op_mode_change_callback_t op_mode_change_cb = NULL;
 static input_calc_mode_change_callback_t calc_mode_change_cb = NULL;
+static input_binary_sequence_change_callback_t binary_sequence_change_cb = NULL;
 static input_save_request_callback_t save_request_cb = NULL; 
 static input_aux_led_blink_request_callback_t aux_led_blink_request_cb = NULL; 
 
@@ -119,6 +120,7 @@ static void handle_taps_for_tempo(void) {
     if (tap_detected()) {
         uint32_t interval = tap_get_interval();
         uint32_t now_for_tap_event = millis(); 
+        
         if (interval >= MIN_INTERVAL && interval <= MAX_INTERVAL) {
             tap_intervals[tap_interval_index++] = interval;
             if (tap_interval_index >= NUM_INTERVALS_FOR_AVG) {
@@ -149,6 +151,7 @@ static void handle_taps_for_tempo(void) {
 static void handle_button_calc_mode_swap(void) {
     uint32_t now = millis();
     bool mod_is_pressed_raw = !gpio_get(GPIOA, GPIO1); // true if MOD (PA1) is pressed
+    bool current_op_mode_is_binary = (last_known_main_op_mode == MODE_BINARY);
 
     switch (current_calc_swap_sm_state) {
         case CALC_SWAP_SM_IDLE:
@@ -163,8 +166,14 @@ static void handle_button_calc_mode_swap(void) {
             if (!mod_is_pressed_raw) { // MOD button released
                 if (now - calc_swap_mode_press_start_time <= CALC_SWAP_MAX_PRESS_DURATION_MS) {
                     if (now - last_calc_swap_trigger_time > CALC_SWAP_COOLDOWN_MS) {
-                        if (calc_mode_change_cb) {
-                            calc_mode_change_cb();
+                        if (current_op_mode_is_binary) {
+                            if (binary_sequence_change_cb) {
+                                binary_sequence_change_cb();
+                            }
+                        } else {
+                            if (calc_mode_change_cb) {
+                                calc_mode_change_cb();
+                            }
                         }
                         last_calc_swap_trigger_time = now;
                     }
@@ -333,12 +342,14 @@ void input_handler_init(
     input_tempo_change_callback_t tempo_cb_param,
     input_op_mode_change_callback_t op_mode_cb_param,
     input_calc_mode_change_callback_t calc_mode_cb_param,
+    input_binary_sequence_change_callback_t binary_seq_cb_param,
     input_save_request_callback_t save_req_cb_param,
     input_aux_led_blink_request_callback_t aux_blink_cb_param 
 ) {
     tempo_change_cb = tempo_cb_param;
     op_mode_change_cb = op_mode_cb_param;
-    calc_mode_change_cb = calc_mode_cb_param; 
+    calc_mode_change_cb = calc_mode_cb_param;
+    binary_sequence_change_cb = binary_seq_cb_param;
     save_request_cb = save_req_cb_param; 
     aux_led_blink_request_cb = aux_blink_cb_param; 
 
@@ -424,11 +435,18 @@ void input_handler_update(void) {
     handle_taps_for_tempo();
 
     if (ext_gate_swap_requested) {
-        // CV Gate Swap (PB4) triggers calc_mode_change if conditions met
+        // CV Gate Swap (PB4) triggers calc_mode_change or binary bank change depending on mode
         // No longer requires PA1 (MOD button) to be pressed simultaneously
         if (now - last_calc_swap_trigger_time > CALC_SWAP_COOLDOWN_MS) {
-            if (calc_mode_change_cb) {
-                calc_mode_change_cb();
+            bool current_op_mode_is_binary = (last_known_main_op_mode == MODE_BINARY);
+            if (current_op_mode_is_binary) {
+                if (binary_sequence_change_cb) {
+                    binary_sequence_change_cb();
+                }
+            } else {
+                if (calc_mode_change_cb) {
+                    calc_mode_change_cb();
+                }
             }
             last_calc_swap_trigger_time = now; // Update cooldown timer for CV swap as well
         }
