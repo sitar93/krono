@@ -67,11 +67,11 @@ src/
 ├── main.c                 # Orchestrator, callbacks, main loop, millis(); save/load glue for mode fields
 ├── main_constants.h       # Timing bounds, shared defines
 ├── variables.h            # Tunable parameters
-├── input_handler.c/h      # Inputs, tap averaging, op-mode SM, ext clock, tempo callback dispatch
+├── input_handler.c/h      # Inputs, tap averaging, op-mode SM, ext clock, tempo dispatch, short-MOD mode actions (12–20)
 ├── clock_manager.c/h      # F1 pulse, mode_context, mode dispatch
 ├── status_led.c/h
-├── drivers/               # io, tap, ext_clock, persistence, rtc
-├── modes/                 # mode_*.c, modes.c, modes.h
+├── drivers/               # io, tap (incl. tap_abort_capture), ext_clock, persistence, rtc
+├── modes/                 # mode_*.c, modes.c/h, mode_mod_dispatch.c, mode_rhythm_shared.c/h
 └── util/
 platformio.ini
 ```
@@ -89,13 +89,32 @@ platformio.ini
 
 **External clock:** `ext_clock.c` validated intervals override tap; timeout falls back to internal tempo.
 
+### Modes 12–20 (short MOD path)
+
+- **`MODE_USES_MOD_GESTURES(m)`** in `modes.h` — true for `MODE_DRIFT` … `MODE_ACCUMULATE`.
+- **`handle_button_calc_mode_swap()`** in `input_handler.c`: short MOD release (within `CALC_SWAP_MAX_PRESS_DURATION_MS`) → `mod_press_cb(MOD_PRESS_EVENT_SINGLE)`.
+- **`mod_press_cb`** wired in `main.c` → `mode_dispatch_mod_press()` → per-mode `mode_*_on_mod_press()`.
+- **Timing:** `CALC_SWAP_MAX_PRESS_DURATION_MS` (short press) and `CALC_SWAP_COOLDOWN_MS` — in `variables.h`.
+- **No MOD+TAP combo path:** modes 12–20 intentionally do not consume TAP for secondary actions; tap-tempo remains independent.
+- **Persistence contract:** each mode in 12–20 exposes `mode_*_set_state(...)` / `mode_*_get_state(...)` (or equivalent getter for flags) so `mode_state.c` can restore and capture MOD-driven runtime state through `krono_state_t`.
+- **Current behavior profile (firmware contract):**
+  - `MODE_DRIFT`: elastic loop with stronger stochastic drift mutations.
+  - `MODE_FILL`: drastic loop (`0..50->0`), low values intentionally sparse with kick emphasis.
+  - `MODE_SKIP`: elastic probability loop.
+  - `MODE_STUTTER`: drastic loop (`2->4->8->2`) plus micro-randomization after each full stutter cycle.
+  - `MODE_MORPH`: continuous generative stream; MOD freezes current state, next MOD resumes to next generated state.
+  - `MODE_MUTE`: random additive/subtractive mute flow; unmute introduces slight per-channel variation.
+  - `MODE_DENSITY`: drastic loop (`0..200->0`) with regeneration at each density step.
+  - `MODE_SONG`: bars `1-6` generated base loop, bars `7-8` generated variation; MOD schedules a brand-new base loop seed.
+  - `MODE_ACCUMULATE`: automatic accumulation with drastic reset at max; each new activation applies slight random loop variation on that output; MOD toggles freeze/unfreeze.
+
 ---
 
 ## Important implementation notes
 
 - `millis()` lives in `main.c` (SysTick 1 ms).
 - Modes should prefer `context->current_time_ms` over raw `millis()` where timing must align with the clock manager.
-- Mode-specific persisted fields are applied in `main.c` / `save_current_state()` (chaos divisor, swing indices, binary bank) alongside `krono_state_t`.
+- Mode-specific persisted fields are applied in `main.c` / `save_current_state()` (chaos divisor, swing indices, fixed-mode bank, and modes 12–20 MOD states) alongside `krono_state_t`.
 - Persistence: `krono_state_t` in `persistence.h`; flash address `0x08060000`. Save is triggered via input-handler save path (see `README.md`).
 
 ---
@@ -108,9 +127,10 @@ platformio.ini
 4. Register update in `clock_manager.c` (`mode_update_functions[]`).
 5. Update `status_led.c` blink count for the new mode.
 6. Extend `krono_state_t` and `main.c` load/save paths if the mode needs new persisted fields.
-7. Update user-facing `README.md` (modes section).
-8. Document the release in `CHANGELOG.txt`.
-9. Build: `platformio run -e blackpill_f411ce`.
+7. If the mode uses short MOD actions like 12–20: extend `MODE_USES_MOD_GESTURES`, add `mode_*_on_mod_press`, register in **`mode_mod_dispatch.c`**, implement at least `MOD_PRESS_EVENT_SINGLE`.
+8. Update user-facing **`README.md`** (modes table + input notes if behavior differs).
+9. Document the release in **`CHANGELOG.txt`**.
+10. Build: `platformio run -e blackpill_f411ce`.
 
 ---
 
@@ -123,6 +143,7 @@ platformio.ini
 - Tempo changes “too early” → `NUM_INTERVALS_FOR_AVG`, `reset_tap_calculation_vars()` / external-clock reset paths in `input_handler.c`.
 - Phase feels wrong → timestamp passed into `clock_manager_set_internal_tempo()`.
 - Tap ignored after gestures → op-mode SM draining `tap_detected()` in non-idle states.
+- Modes 12–20 MOD short ignored → check `CALC_SWAP_MAX_PRESS_DURATION_MS`, cooldown (`last_calc_swap_trigger_time`), `INPUT_SM_IDLE` gating, and `external_clock_active` early return.
 - External clock issues → `external_clock_active` gating in `input_handler_update()`.
 
 **Manual checks:** steady taps → lock on 4th tap; ext clock priority; disconnect ext clock → fallback.
@@ -178,4 +199,4 @@ Historical brainstorming lived in removed `NEXT_MODES.txt`. New concepts should 
 2. `platformio run -e blackpill_f411ce`.
 3. Fix warnings where reasonable.
 4. Flash and test on hardware.
-5. Update `CHANGELOG.txt` and `README.md` when behavior or user-visible details change.
+5. Update `CHANGELOG.txt` and **`README.md`** (and this file if architecture/input contracts change).

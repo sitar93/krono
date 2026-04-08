@@ -123,3 +123,11 @@ bool tap_check_timeout(uint32_t current_time_ms) {
     }
     return false;
 }
+
+void tap_abort_capture(void) {
+    nvic_disable_irq(NVIC_EXTI0_IRQ);
+    tap_detected_flag = false;
+    tap_interval = 0;
+    first_tap_registered = false;
+    nvic_enable_irq(NVIC_EXTI0_IRQ);
+}

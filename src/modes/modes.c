@@ -12,7 +12,7 @@
 #include "mode_logic.h"
 #include "mode_phasing.h"
 #include "mode_chaos.h"
-#include "mode_binary.h"
+#include "mode_fixed.h"
 
 // Function pointer table for mode reset functions
 static void (*mode_reset_functions[NUM_OPERATIONAL_MODES])(void) = {
@@ -26,7 +26,16 @@ static void (*mode_reset_functions[NUM_OPERATIONAL_MODES])(void) = {
     mode_logic_reset,
     mode_phasing_reset,
     mode_chaos_reset,
-    mode_binary_reset
+    mode_fixed_reset,
+    mode_drift_reset,
+    mode_fill_reset,
+    mode_skip_reset,
+    mode_stutter_reset,
+    mode_morph_reset,
+    mode_mute_reset,
+    mode_density_reset,
+    mode_song_reset,
+    mode_accumulate_reset
 };
 
 // Function pointer table for mode init functions
@@ -41,7 +50,16 @@ static void (*mode_init_functions[NUM_OPERATIONAL_MODES])(void) = {
     mode_logic_init,
     mode_phasing_init,
     mode_chaos_init,
-    mode_binary_init
+    mode_fixed_init,
+    mode_drift_init,
+    mode_fill_init,
+    mode_skip_init,
+    mode_stutter_init,
+    mode_morph_init,
+    mode_mute_init,
+    mode_density_init,
+    mode_song_init,
+    mode_accumulate_init
 };
 
 

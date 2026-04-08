@@ -1,5 +1,6 @@
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdlib.h>
 
 #include <libopencm3/cm3/nvic.h>
 #include <libopencm3/cm3/systick.h>
@@ -20,7 +21,7 @@
 #include "main_constants.h"
 #include "mode_state.h"
 
-#include "modes/mode_binary.h"
+#include "modes/mode_fixed.h"
 
 // --- Global State (Static to this file) ---
 krono_state_t current_state; 
@@ -54,9 +55,10 @@ static void save_current_state(void);
 static void on_tap_tempo_change(uint32_t new_interval_ms, bool is_external_clock, uint32_t event_timestamp_ms);
 static void on_op_mode_change(uint8_t mode_clicks);
 static void on_calc_mode_change(void);
-static void on_binary_sequence_change(void);
+static void on_fixed_bank_change(void);
 static void on_save_request_from_input_handler(void); 
-static void on_aux_led_blink_request_from_input_handler(void); 
+static void on_aux_led_blink_request_from_input_handler(void);
+static void on_mod_press(mod_press_event_t event, uint32_t timestamp_ms);
 
 // Forward Declarations
 static void system_init(void);
@@ -120,14 +122,14 @@ static void on_calc_mode_change(void) {
     status_led_pa3_blink_end_time = millis() + STATUS_LED_PA3_BLINK_DURATION_MS;
 }
 
-static void on_binary_sequence_change(void) {
-    // MOD press only cycles banks in BINARY mode
-    if (g_current_op_mode == MODE_BINARY) {
-        uint8_t current_bank = mode_binary_get_bank();
-        uint8_t next_bank = (current_bank + 1) % NUM_BINARY_BANKS;
+static void on_fixed_bank_change(void) {
+    // MOD press only cycles banks in FIXED mode
+    if (g_current_op_mode == MODE_FIXED) {
+        uint8_t current_bank = mode_fixed_get_bank();
+        uint8_t next_bank = (current_bank + 1) % NUM_FIXED_BANKS;
         
-        mode_binary_set_bank(next_bank);
-        current_state.binary_bank = next_bank;
+        mode_fixed_set_bank(next_bank);
+        current_state.fixed_bank = next_bank;
         
         set_output(JACK_OUT_AUX_LED_PA3, true);
         status_led_pa3_blink_end_time = millis() + STATUS_LED_PA3_BLINK_DURATION_MS;
@@ -139,6 +141,13 @@ static void on_save_request_from_input_handler(void) {
 }
 
 static void on_aux_led_blink_request_from_input_handler(void) {
+    set_output(JACK_OUT_AUX_LED_PA3, true);
+    status_led_pa3_blink_end_time = millis() + STATUS_LED_PA3_BLINK_DURATION_MS;
+}
+
+static void on_mod_press(mod_press_event_t event, uint32_t timestamp_ms) {
+    (void)event;
+    mode_dispatch_mod_press(g_current_op_mode, MOD_PRESS_EVENT_SINGLE, timestamp_ms);
     set_output(JACK_OUT_AUX_LED_PA3, true);
     status_led_pa3_blink_end_time = millis() + STATUS_LED_PA3_BLINK_DURATION_MS;
 }
@@ -196,6 +205,8 @@ static void system_init(void) {
         clock_manager_init(g_current_op_mode, current_state.tempo_interval);
         mode_state_apply_runtime(g_current_op_mode, &current_state);
 
+        srand((unsigned int)millis() ^ 0xC001D00Du);
+
     } else {
         g_current_op_mode = current_state.op_mode; 
         g_current_calc_mode = CALC_MODE_NORMAL;
@@ -211,16 +222,18 @@ static void system_init(void) {
         mode_state_validate(&current_state);
         clock_manager_init(g_current_op_mode, current_state.tempo_interval);
         mode_state_apply_runtime(g_current_op_mode, &current_state);
+
+        srand((unsigned int)millis() ^ 0xC001D00Du);
     }
 
     input_handler_init(
         on_tap_tempo_change,
         on_op_mode_change,
         on_calc_mode_change,
-        on_binary_sequence_change,
+        on_fixed_bank_change,
         on_save_request_from_input_handler,
-        on_aux_led_blink_request_from_input_handler 
-    );
+        on_aux_led_blink_request_from_input_handler,
+        on_mod_press);
     input_handler_update_main_op_mode(g_current_op_mode); 
 
     clock_manager_set_calc_mode(g_current_calc_mode);
@@ -249,7 +262,7 @@ static void save_current_state(void) {
 #endif
 
     mode_state_capture_for_save(g_current_op_mode, &current_state, &state_to_save);
-    state_to_save.binary_sequence = 0; // Not used anymore
+    state_to_save.fixed_sequence = 0; // Not used anymore
 
     state_to_save.checksum = 0; 
     state_to_save.checksum = persistence_calculate_checksum(&state_to_save);

@@ -2,10 +2,12 @@
 #include "main_constants.h"
 #include "modes/mode_chaos.h" // For CHAOS_DIVISOR_DEFAULT, CHAOS_DIVISOR_MIN, CHAOS_DIVISOR_STEP
 #include "modes/mode_swing.h" // For NUM_SWING_PROFILES 
-#include "modes/mode_binary.h" // For NUM_BINARY_BANKS
+#include "modes/mode_fixed.h" // For NUM_FIXED_BANKS
+#include "modes/mode_rhythm_shared.h" // For MODE_RHYTHM_NUM_OUTPUTS
 
 #include <libopencm3/stm32/flash.h>
 #include <string.h> // For memcpy and memset
+#include <stddef.h> // For offsetof
 
 // Helper function to get a default state (not exposed in header)
 static krono_state_t get_default_krono_state(void) {
@@ -21,6 +23,36 @@ static krono_state_t get_default_krono_state(void) {
     default_state.swing_profile_index_A = 3; // Default to Medium swing for Group A
     default_state.swing_profile_index_B = 3; // Default to Medium swing for Group B
     default_state.chaos_mode_divisor = CHAOS_DIVISOR_DEFAULT;
+    default_state.fixed_bank = 0;
+    default_state.fixed_sequence = 0;
+    default_state.drift_active = false;
+    default_state.drift_probability = 0;
+    default_state.drift_ramp_up = true;
+    default_state.fill_density = 0;
+    default_state.fill_ramp_up = true;
+    default_state.skip_active = false;
+    default_state.skip_probability = 0;
+    default_state.skip_ramp_up = true;
+    default_state.stutter_active = false;
+    default_state.stutter_length = 2;
+    default_state.stutter_ramp_up = true;
+    memset(default_state.stutter_variation_mask, 0, sizeof default_state.stutter_variation_mask);
+    default_state.morph_frozen = false;
+    default_state.morph_generation = 0;
+    memset(default_state.morph_patterns, 0, sizeof default_state.morph_patterns);
+    default_state.mute_mask = 0;
+    default_state.mute_count = 0;
+    default_state.mute_ramp_up = true;
+    memset(default_state.mute_variation_mask, 0, sizeof default_state.mute_variation_mask);
+    default_state.density_pct = 100;
+    default_state.density_ramp_up = true;
+    default_state.song_variation_seed = 0xC0FFEE01u;
+    default_state.song_variation_pending = false;
+    default_state.accumulate_active_count = 1;
+    default_state.accumulate_add_pending = false;
+    default_state.accumulate_active_mask = 1u;
+    memset(default_state.accumulate_phase_offsets, 0, sizeof default_state.accumulate_phase_offsets);
+    memset(default_state.accumulate_variation_masks, 0, sizeof default_state.accumulate_variation_masks);
     
     default_state.checksum = 0; // Checksum must be calculated last over a zeroed checksum field
     default_state.checksum = persistence_calculate_checksum(&default_state);
@@ -70,7 +102,24 @@ bool persistence_load_state(krono_state_t *state) {
     }
     if (state->swing_profile_index_A >= NUM_SWING_PROFILES) state->swing_profile_index_A = 3;
     if (state->swing_profile_index_B >= NUM_SWING_PROFILES) state->swing_profile_index_B = 3;
-    if (state->binary_bank >= NUM_BINARY_BANKS) state->binary_bank = 0;
+    if (state->fixed_bank >= NUM_FIXED_BANKS) state->fixed_bank = 0;
+    if (state->drift_probability > 100) state->drift_probability = 0;
+    if (state->fill_density > 50) state->fill_density = 0;
+    if (state->skip_probability > 100) state->skip_probability = 0;
+    if (state->stutter_length != 2 && state->stutter_length != 4 && state->stutter_length != 8) state->stutter_length = 2;
+    state->mute_mask &= 0x03FFu;
+    if (state->mute_count > MODE_RHYTHM_NUM_OUTPUTS) state->mute_count = MODE_RHYTHM_NUM_OUTPUTS;
+    if (state->density_pct > 200) state->density_pct = 100;
+    if (state->accumulate_active_count < 1 || state->accumulate_active_count > MODE_RHYTHM_NUM_OUTPUTS) {
+        state->accumulate_active_count = 1;
+    }
+    state->accumulate_active_mask &= 0x03FFu;
+    if (state->accumulate_active_mask == 0) {
+        state->accumulate_active_mask = 1u;
+    }
+    for (int i = 0; i < MODE_RHYTHM_NUM_OUTPUTS; i++) {
+        state->accumulate_phase_offsets[i] &= 0x0Fu;
+    }
 
 #if SAVE_CALC_MODE_PER_OP_MODE
     for (int i = 0; i < NUM_OPERATIONAL_MODES; i++) {

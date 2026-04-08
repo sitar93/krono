@@ -22,7 +22,16 @@ typedef enum {
     MODE_LOGIC,             // 8: Logic Gates
     MODE_PHASING,           // 9: Phasing Clocks
     MODE_CHAOS,             // 10: Deterministic Chaos
-    MODE_BINARY,            // 11: Binary Pattern Sequencer
+    MODE_FIXED,             // 11: Fixed Pattern Sequencer
+    MODE_DRIFT,             // 12
+    MODE_FILL,
+    MODE_SKIP,
+    MODE_STUTTER,
+    MODE_MORPH,
+    MODE_MUTE,
+    MODE_DENSITY,
+    MODE_SONG,
+    MODE_ACCUMULATE,        // 20
     NUM_OPERATIONAL_MODES // Keep this last for counting
 } operational_mode_t;
 
@@ -32,6 +41,12 @@ typedef enum {
     CALC_MODE_SWAPPED,    // Swapped/Secondary calculation
     NUM_CALCULATION_MODES // Keep this last for counting
 } calculation_mode_t;
+
+/** MOD for modes 12–20: only short press (SINGLE). DOUBLE is unused, kept for stable enum layout. */
+typedef enum {
+    MOD_PRESS_EVENT_SINGLE = 0,
+    MOD_PRESS_EVENT_DOUBLE
+} mod_press_event_t;
 
 // --- Structs ---
 
@@ -116,9 +131,90 @@ void mode_chaos_init(void);
 void mode_chaos_update(const mode_context_t* context);
 void mode_chaos_reset(void);
 
-// Mode Binary Pattern Sequencer
-void mode_binary_init(void);
-void mode_binary_update(const mode_context_t* context);
-void mode_binary_reset(void);
+// Mode Fixed Pattern Sequencer
+void mode_fixed_init(void);
+void mode_fixed_update(const mode_context_t* context);
+void mode_fixed_reset(void);
+
+// Modes 12–20 (rhythm pattern + short MOD)
+void mode_drift_init(void);
+void mode_drift_update(const mode_context_t *context);
+void mode_drift_reset(void);
+void mode_drift_reset_step(void);
+void mode_drift_on_mod_press(mod_press_event_t ev, uint32_t ts_ms);
+void mode_drift_set_state(bool active, uint8_t probability, bool ramp_up);
+void mode_drift_get_state(bool *active, uint8_t *probability, bool *ramp_up);
+
+void mode_fill_init(void);
+void mode_fill_update(const mode_context_t *context);
+void mode_fill_reset(void);
+void mode_fill_reset_step(void);
+void mode_fill_on_mod_press(mod_press_event_t ev, uint32_t ts_ms);
+void mode_fill_set_state(uint8_t density, bool ramp_up);
+void mode_fill_get_state(uint8_t *density, bool *ramp_up);
+
+void mode_skip_init(void);
+void mode_skip_update(const mode_context_t *context);
+void mode_skip_reset(void);
+void mode_skip_reset_step(void);
+void mode_skip_on_mod_press(mod_press_event_t ev, uint32_t ts_ms);
+void mode_skip_set_state(bool active, uint8_t probability, bool ramp_up);
+void mode_skip_get_state(bool *active, uint8_t *probability, bool *ramp_up);
+
+void mode_stutter_init(void);
+void mode_stutter_update(const mode_context_t *context);
+void mode_stutter_reset(void);
+void mode_stutter_reset_step(void);
+void mode_stutter_on_mod_press(mod_press_event_t ev, uint32_t ts_ms);
+void mode_stutter_set_state(bool active, uint8_t length, bool ramp_up, const uint16_t *variation_mask);
+void mode_stutter_get_state(bool *active, uint8_t *length, bool *ramp_up, uint16_t *variation_mask);
+
+void mode_morph_init(void);
+void mode_morph_update(const mode_context_t *context);
+void mode_morph_reset(void);
+void mode_morph_reset_step(void);
+void mode_morph_on_mod_press(mod_press_event_t ev, uint32_t ts_ms);
+void mode_morph_set_state(bool frozen, uint32_t generation, const uint16_t *morphed);
+void mode_morph_get_state(bool *frozen, uint32_t *generation, uint16_t *morphed);
+
+void mode_mute_init(void);
+void mode_mute_update(const mode_context_t *context);
+void mode_mute_reset(void);
+void mode_mute_reset_step(void);
+void mode_mute_on_mod_press(mod_press_event_t ev, uint32_t ts_ms);
+void mode_mute_set_state(uint16_t muted_mask, uint8_t mute_count, bool ramp_up, const uint16_t *variation_mask);
+void mode_mute_get_state(uint16_t *muted_mask, uint8_t *mute_count, bool *ramp_up, uint16_t *variation_mask);
+
+void mode_density_init(void);
+void mode_density_update(const mode_context_t *context);
+void mode_density_reset(void);
+void mode_density_reset_step(void);
+void mode_density_on_mod_press(mod_press_event_t ev, uint32_t ts_ms);
+void mode_density_set_state(uint8_t density_pct, bool ramp_up);
+void mode_density_get_state(uint8_t *density_pct, bool *ramp_up);
+
+void mode_song_init(void);
+void mode_song_update(const mode_context_t *context);
+void mode_song_reset(void);
+void mode_song_reset_step(void);
+void mode_song_on_mod_press(mod_press_event_t ev, uint32_t ts_ms);
+void mode_song_set_state(uint32_t variation_seed, bool variation_pending);
+void mode_song_get_state(uint32_t *variation_seed, bool *variation_pending);
+
+void mode_accumulate_init(void);
+void mode_accumulate_update(const mode_context_t *context);
+void mode_accumulate_reset(void);
+void mode_accumulate_reset_step(void);
+void mode_accumulate_on_mod_press(mod_press_event_t ev, uint32_t ts_ms);
+void mode_accumulate_set_state(uint8_t active_count, bool add_pending, uint16_t active_mask,
+                               const uint8_t *phase_offsets, const uint16_t *variation_masks);
+void mode_accumulate_get_state(uint8_t *active_count, bool *add_pending, uint16_t *active_mask,
+                               uint8_t *phase_offsets, uint16_t *variation_masks);
+
+/** True for modes 12–20: MOD short-press handled by mode_*_on_mod_press (not calc/fixed swap). */
+#define MODE_USES_MOD_GESTURES(m) \
+    ((int)(m) >= (int)MODE_DRIFT && (int)(m) <= (int)MODE_ACCUMULATE)
+
+void mode_dispatch_mod_press(operational_mode_t op, mod_press_event_t ev, uint32_t ts_ms);
 
 #endif // MODES_H

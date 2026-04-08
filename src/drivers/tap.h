@@ -46,6 +46,10 @@ bool tap_is_button_pressed(void);
  */
 bool tap_check_timeout(uint32_t current_time_ms);
 
+/**
+ * @brief Clears tap-tempo capture (e.g. after TAP was used as MOD combo modifier).
+ */
+void tap_abort_capture(void);
 
 #ifdef __cplusplus
 }

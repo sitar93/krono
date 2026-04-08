@@ -157,6 +157,7 @@ void tim3_isr(void) {
 // Read digital input state
 bool jack_get_digital_input(jack_input_t input) {
     switch(input) {
+        /* Raw PA0: HIGH = open / idle. Op-mode change SM historically uses this level as "tap_pressed_now". */
         case JACK_IN_TAP:          return gpio_get(GPIOA, GPIO0);
         case JACK_IN_MODE_SWAP:    return !gpio_get(GPIOA, GPIO1); // PA1 pulled up, pressed = LOW
         case JACK_IN_GATE_SWAP:    return gpio_get(GPIOB, GPIO4);

@@ -4,5 +4,5 @@ v1.2.0 - external clock copy fix and external clock phase fix
 v1.2.1 - save state logic change, mode swing swap edit, bug fix
 v1.2.2 - default trigger length increased to 5 ms (from 1 ms) for improved compatibility with receivers
 v1.2.3 - increased trigger lenght to 10ms and removed old legacy files
-v1.3.0 - added mode 11: BINARY: a fixed pattern generator with a 16 step sequencer and 20 different output
-v1.3.1 - documentation consolidation: README as primary user reference; merged developer/agent material into AGENTS.md; removed redundant markdown/txt guides (KODING, knowledge, DEBUG_PLAYBOOK, CURSOR_PLATFORMIO_SETUP, DEVELOPMENT_INSTRUCTIONS, MODES_DESCRIPTIONS, NEXT_MODES, RELEASE_BUILD, PLATFORMIO_INSTALL_PROCEDURES)
+v1.3.0 - added mode 11: FIXED: a fixed pattern generator with a 16 step sequencer and 20 different output
+v1.3.1 - modes 12-20 now use short MOD only (no MOD+TAP); fixed first MOD cooldown trigger; renamed mode 11 to FIXED; full persistence added for MOD-driven states in modes 11-20

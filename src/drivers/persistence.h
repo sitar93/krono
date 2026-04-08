@@ -5,6 +5,7 @@
 #include <stdbool.h>
 #include "modes/modes.h" // Include the modes header for NUM_OPERATIONAL_MODES
 #include "modes/mode_swing.h" // For NUM_SWING_PROFILES (used in main.c for validation)
+#include "modes/mode_rhythm_shared.h"
 
 // --- Constants ---
 #define PERSISTENCE_MAGIC_NUMBER 0xDEADBEEF // Example magic number
@@ -21,8 +22,36 @@ typedef struct {
     uint32_t chaos_mode_divisor; // Specific divisor setting for Chaos mode
     uint8_t swing_profile_index_A; // Active swing profile index for MODE_SWING Group A
     uint8_t swing_profile_index_B; // Active swing profile index for MODE_SWING Group B
-    uint8_t binary_bank;           // Active bank for MODE_BINARY (0 or 1)
-    uint8_t binary_sequence;       // Active sequence for MODE_BINARY
+    uint8_t fixed_bank;            // Active bank for MODE_FIXED (0..9)
+    uint8_t fixed_sequence;        // Legacy sequence field for mode 11
+    bool drift_active;
+    uint8_t drift_probability;
+    bool drift_ramp_up;
+    uint8_t fill_density;
+    bool fill_ramp_up;
+    bool skip_active;
+    uint8_t skip_probability;
+    bool skip_ramp_up;
+    bool stutter_active;
+    uint8_t stutter_length;
+    bool stutter_ramp_up;
+    uint16_t stutter_variation_mask[MODE_RHYTHM_NUM_OUTPUTS];
+    bool morph_frozen;
+    uint32_t morph_generation;
+    uint16_t morph_patterns[MODE_RHYTHM_NUM_OUTPUTS];
+    uint16_t mute_mask;
+    uint8_t mute_count;
+    bool mute_ramp_up;
+    uint16_t mute_variation_mask[MODE_RHYTHM_NUM_OUTPUTS];
+    uint8_t density_pct;
+    bool density_ramp_up;
+    uint32_t song_variation_seed;
+    bool song_variation_pending;
+    uint8_t accumulate_active_count;
+    bool accumulate_add_pending;
+    uint16_t accumulate_active_mask;
+    uint8_t accumulate_phase_offsets[MODE_RHYTHM_NUM_OUTPUTS];
+    uint16_t accumulate_variation_masks[MODE_RHYTHM_NUM_OUTPUTS];
     uint32_t checksum;           // Simple checksum for validation
 } krono_state_t;
 

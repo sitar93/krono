@@ -77,7 +77,16 @@ void status_led_update(uint32_t current_time_ms) {
         case MODE_LOGIC:         blinks = 8; break;
         case MODE_PHASING:       blinks = 9; break;
         case MODE_CHAOS:         blinks = 10; break;
-        case MODE_BINARY:        blinks = 11; break; // <-- Added Chaos mode
+        case MODE_FIXED:         blinks = 11; break;
+        case MODE_DRIFT:         blinks = 12; break;
+        case MODE_FILL:          blinks = 13; break;
+        case MODE_SKIP:          blinks = 14; break;
+        case MODE_STUTTER:       blinks = 15; break;
+        case MODE_MORPH:         blinks = 16; break;
+        case MODE_MUTE:          blinks = 17; break;
+        case MODE_DENSITY:       blinks = 18; break;
+        case MODE_SONG:          blinks = 19; break;
+        case MODE_ACCUMULATE:    blinks = 20; break;
         default: blinks = 1; break; // Safe default for unknown modes
     }
     uint32_t on_duration = STATUS_LED_BASE_INTERVAL_MS;

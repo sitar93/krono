@@ -12,7 +12,7 @@
 #include "modes/mode_polyrhythm.h"
 #include "modes/mode_phasing.h"
 #include "modes/mode_chaos.h"
-#include "modes/mode_binary.h"
+#include "modes/mode_fixed.h"
 
 #include "main_constants.h"  // For DEFAULT_PULSE_DURATION_MS
 #include "util/delay.h"      // For millis()
@@ -50,7 +50,16 @@ static void (*mode_update_functions[NUM_OPERATIONAL_MODES])(const mode_context_t
     [MODE_LOGIC]         = mode_logic_update,
     [MODE_PHASING]       = mode_phasing_update,
     [MODE_CHAOS]         = mode_chaos_update,
-    [MODE_BINARY]        = mode_binary_update
+    [MODE_FIXED]         = mode_fixed_update,
+    [MODE_DRIFT]         = mode_drift_update,
+    [MODE_FILL]          = mode_fill_update,
+    [MODE_SKIP]          = mode_skip_update,
+    [MODE_STUTTER]       = mode_stutter_update,
+    [MODE_MORPH]         = mode_morph_update,
+    [MODE_MUTE]          = mode_mute_update,
+    [MODE_DENSITY]       = mode_density_update,
+    [MODE_SONG]          = mode_song_update,
+    [MODE_ACCUMULATE]    = mode_accumulate_update
 };
 
 // --- Public Function Implementations ---
