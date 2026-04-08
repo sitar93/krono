@@ -5,4 +5,5 @@ v1.2.1 - save state logic change, mode swing swap edit, bug fix
 v1.2.2 - default trigger length increased to 5 ms (from 1 ms) for improved compatibility with receivers
 v1.2.3 - increased trigger lenght to 10ms and removed old legacy files
 v1.3.0 - added mode 11: FIXED: a fixed pattern generator with a 16 step sequencer and 20 different output
-v1.3.1 - modes 12-20 now use short MOD only (no MOD+TAP); fixed first MOD cooldown trigger; renamed mode 11 to FIXED; full persistence added for MOD-driven states in modes 11-20
+v1.3.1 - added modes 12-20; renamed mode 11 to FIXED; full persistence added for MOD-driven states in modes 11-20
+v1.3.2 - Omega (modes 11–20): same op-mode change gesture as modes 1–10, but hold TAP ~3s after the 1s qualify for a PA3 double-flash; MOD click count maps to mode N+10

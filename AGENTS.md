@@ -67,7 +67,7 @@ src/
 ├── main.c                 # Orchestrator, callbacks, main loop, millis(); save/load glue for mode fields
 ├── main_constants.h       # Timing bounds, shared defines
 ├── variables.h            # Tunable parameters
-├── input_handler.c/h      # Inputs, tap averaging, op-mode SM, ext clock, tempo dispatch, short-MOD mode actions (12–20)
+├── input_handler.c/h      # Inputs, tap averaging, op-mode SM (+ Omega), ext clock, tempo dispatch, short-MOD mode actions (12–20)
 ├── clock_manager.c/h      # F1 pulse, mode_context, mode dispatch
 ├── status_led.c/h
 ├── drivers/               # io, tap (incl. tap_abort_capture), ext_clock, persistence, rtc
@@ -88,6 +88,32 @@ platformio.ini
 **Current tap policy:** tempo update after the **4th tap** (three intervals collected when `NUM_INTERVALS_FOR_AVG == 3`). **Internal tap** updates interval only (`clock_manager_set_internal_tempo`); **external clock** aligns phase and emits an immediate F1 pulse.
 
 **External clock:** `ext_clock.c` validated intervals override tap; timeout falls back to internal tempo.
+
+### Omega — selecting operational modes 11–20 (v1.3.2+)
+
+Omega reuses the **same** op-mode change state machine as modes 1–10 (`handle_op_mode_sm` in `input_handler.c`). There is **no** long-press on Mode to enter a separate UI.
+
+| Path | Condition | Confirm callback |
+|------|-----------|------------------|
+| Base | User qualifies with Tap hold ≥ `OP_MODE_TAP_HOLD_DURATION_MS`, releases Tap **before** `OP_MODE_TAP_OMEGA_HOLD_MS` from **first** press | `op_mode_change_cb(N)` with N = 1…10 |
+| Omega | User **keeps holding** Tap until `OP_MODE_TAP_OMEGA_HOLD_MS` (~3 s from first press) | `op_mode_change_cb(N + 10)`; N wrapped to 1…10 if click count exceeds 10 |
+
+**Timings** (`variables.h`): `OP_MODE_TAP_HOLD_DURATION_MS`, `OP_MODE_TAP_OMEGA_HOLD_MS`, `OP_MODE_TAP_OMEGA_MAX_HOLD_MS` (abort if Tap never released within this window from press start), `OMEGA_AUX_PULSE_ON_MS`, `OMEGA_AUX_INTER_PULSE_GAP_MS`.
+
+**PA3 feedback**
+
+- At **1 s** qualify: existing `aux_led_blink_request_cb()` → `main.c` sets PA3 high and `status_led_pa3_blink_end_time` (+100 ms).
+- At **Omega arm** (~3 s): **do not** fire the aux callback twice in a row for the double flash — two requests only extend one timer and merge into one long ON. Instead, `input_handler.c` runs a small sequencer with `set_output(JACK_OUT_AUX_LED_PA3, true/false)` and deadlines (`omega_aux_seq` / `pump_omega_aux_blink_sequence()`).
+
+**`main.c` coordination**
+
+- `krono_pa3_soft_blink_cancel()` — clears `status_led_pa3_blink_end_time` when the Omega PA3 sequence starts.
+- `input_handler_omega_aux_blink_sequence_active()` — while true, the main loop **skips** the generic PA3-off timeout so the double flash is not truncated by another soft blink.
+- Declared in `input_handler.h`; `krono_pa3_soft_blink_cancel` is implemented in `main.c` (forward-declared from `input_handler.c`).
+
+**Interaction with modes 12–20 short MOD**
+
+`handle_button_calc_mode_swap()` runs only when `current_op_mode_sm_state == INPUT_SM_IDLE` (and other gates). During op-mode change (including Omega), short MOD is consumed by the op-mode SM, not the rhythm-mode gesture path — unchanged from pre-Omega behavior.
 
 ### Modes 12–20 (short MOD path)
 
@@ -144,6 +170,7 @@ platformio.ini
 - Phase feels wrong → timestamp passed into `clock_manager_set_internal_tempo()`.
 - Tap ignored after gestures → op-mode SM draining `tap_detected()` in non-idle states.
 - Modes 12–20 MOD short ignored → check `CALC_SWAP_MAX_PRESS_DURATION_MS`, cooldown (`last_calc_swap_trigger_time`), `INPUT_SM_IDLE` gating, and `external_clock_active` early return.
+- Omega Aux looks like one long blink → must use `set_output` sequence, not double `aux_led_blink_request_cb`; verify `krono_pa3_soft_blink_cancel()` and `input_handler_omega_aux_blink_sequence_active()` in `main.c` loop.
 - External clock issues → `external_clock_active` gating in `input_handler_update()`.
 
 **Manual checks:** steady taps → lock on 4th tap; ext clock priority; disconnect ext clock → fallback.

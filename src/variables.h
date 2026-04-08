@@ -39,6 +39,18 @@
 /** @brief Minimum hold duration (ms) for TAP (PA0) before MODE (PA1) presses are counted for Op Mode switching. */
 #define OP_MODE_TAP_HOLD_DURATION_MS 1000
 
+/** @brief From same TAP press start: hold past this (ms) while still holding after qualify → Omega (PA3 double blink); MOD→modes 11–20. */
+#define OP_MODE_TAP_OMEGA_HOLD_MS 3000
+
+/** @brief Abort op-mode change SM if TAP never released within this total hold from first press (ms). */
+#define OP_MODE_TAP_OMEGA_MAX_HOLD_MS 5000
+
+/** @brief Omega indicator: each flash ON time on PA3 (ms). */
+#define OMEGA_AUX_PULSE_ON_MS 55
+
+/** @brief Omega indicator: dark gap between the two flashes (ms). */
+#define OMEGA_AUX_INTER_PULSE_GAP_MS 100
+
 /** @brief Time window (ms) after the LAST Mode press (while Tap is held) to wait for another Mode press before finalizing Op Mode selection. */
 #define OP_MODE_MULTI_PRESS_WINDOW_MS 500
 

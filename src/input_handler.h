@@ -26,4 +26,7 @@ void input_handler_init(
 void input_handler_update(void);
 void input_handler_update_main_op_mode(operational_mode_t mode);
 
+/** True while input_handler is driving PA3 for the Omega double-flash (main must not force PA3 off). */
+bool input_handler_omega_aux_blink_sequence_active(void);
+
 #endif // INPUT_HANDLER_H

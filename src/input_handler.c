@@ -15,6 +15,9 @@
 #include <libopencm3/cm3/nvic.h>
 #include <stddef.h> // NULL
 
+/* main.c — evita che il timeout PA3 spezza il doppio blink Omega */
+void krono_pa3_soft_blink_cancel(void);
+
 #define GATE_SWAP_DEBOUNCE_MS 10 
 #define MODE_SWITCH_PA1_DEBOUNCE_MS 50 
 #define OP_MODE_TIMEOUT_SAVE_MS 5000
@@ -80,6 +83,65 @@ static uint32_t last_calc_swap_trigger_time = 0;
 static volatile bool ext_gate_swap_requested = false;
 static volatile uint32_t last_gate_swap_isr_time = 0;
 
+/** True if user held TAP past OP_MODE_TAP_OMEGA_HOLD_MS before release (MOD clicks → mode index +10). */
+static bool op_mode_select_omega = false;
+static bool op_mode_omega_threshold_announced = false;
+
+/**
+ * PA3 double-blink for Omega: explicit OFF between pulses. (Two aux_led callbacks only extend one timer in
+ * main.c and merge into a single long ON.)
+ */
+typedef enum {
+    OMEGA_AUX_SEQ_IDLE = 0,
+    OMEGA_AUX_SEQ_P1_ON,
+    OMEGA_AUX_SEQ_GAP,
+    OMEGA_AUX_SEQ_P2_ON,
+} omega_aux_seq_t;
+
+static omega_aux_seq_t omega_aux_seq = OMEGA_AUX_SEQ_IDLE;
+static uint32_t omega_aux_seq_deadline = 0;
+
+static void pump_omega_aux_blink_sequence(uint32_t now) {
+    switch (omega_aux_seq) {
+    case OMEGA_AUX_SEQ_IDLE:
+        break;
+    case OMEGA_AUX_SEQ_P1_ON:
+        if ((int32_t)(now - omega_aux_seq_deadline) >= 0) {
+            set_output(JACK_OUT_AUX_LED_PA3, false);
+            omega_aux_seq = OMEGA_AUX_SEQ_GAP;
+            omega_aux_seq_deadline = now + OMEGA_AUX_INTER_PULSE_GAP_MS;
+        }
+        break;
+    case OMEGA_AUX_SEQ_GAP:
+        if ((int32_t)(now - omega_aux_seq_deadline) >= 0) {
+            set_output(JACK_OUT_AUX_LED_PA3, true);
+            omega_aux_seq = OMEGA_AUX_SEQ_P2_ON;
+            omega_aux_seq_deadline = now + OMEGA_AUX_PULSE_ON_MS;
+        }
+        break;
+    case OMEGA_AUX_SEQ_P2_ON:
+        if ((int32_t)(now - omega_aux_seq_deadline) >= 0) {
+            set_output(JACK_OUT_AUX_LED_PA3, false);
+            omega_aux_seq = OMEGA_AUX_SEQ_IDLE;
+        }
+        break;
+    default:
+        omega_aux_seq = OMEGA_AUX_SEQ_IDLE;
+        break;
+    }
+}
+
+static void omega_aux_blink_sequence_start(uint32_t now) {
+    krono_pa3_soft_blink_cancel();
+    omega_aux_seq = OMEGA_AUX_SEQ_P1_ON;
+    set_output(JACK_OUT_AUX_LED_PA3, true);
+    omega_aux_seq_deadline = now + OMEGA_AUX_PULSE_ON_MS;
+}
+
+bool input_handler_omega_aux_blink_sequence_active(void) {
+    return omega_aux_seq != OMEGA_AUX_SEQ_IDLE;
+}
+
 static bool calc_swap_cooldown_ok(uint32_t now) {
     return (last_calc_swap_trigger_time == 0u) ||
            ((now - last_calc_swap_trigger_time) > CALC_SWAP_COOLDOWN_MS);
@@ -100,7 +162,15 @@ static void reset_op_mode_sm_vars(void) {
     pa1_mod_change_last_raw_state = false;
 
     if (exti_get_flag_status(EXTI0)) { exti_reset_request(EXTI0); }
-    
+
+    op_mode_select_omega = false;
+    op_mode_omega_threshold_announced = false;
+    if (omega_aux_seq != OMEGA_AUX_SEQ_IDLE) {
+        krono_pa3_soft_blink_cancel();
+        set_output(JACK_OUT_AUX_LED_PA3, false);
+        omega_aux_seq = OMEGA_AUX_SEQ_IDLE;
+    }
+
     just_exited_op_mode_sm = true;
 }
 
@@ -179,6 +249,8 @@ static void handle_button_calc_mode_swap(void) {
 static void handle_op_mode_sm(uint32_t now, bool tap_pressed_now, bool mod_is_pressed_raw) {
     static bool tap_confirm_action_taken_this_press = false;
 
+    pump_omega_aux_blink_sequence(now);
+
     pa1_mod_change_current_raw_state = mod_is_pressed_raw;
     if (pa1_mod_change_current_raw_state != pa1_mod_change_last_raw_state) {
         pa1_mod_change_last_event_time = now;
@@ -217,6 +289,8 @@ static void handle_op_mode_sm(uint32_t now, bool tap_pressed_now, bool mod_is_pr
                 op_mode_snapshot_for_timeout = last_known_main_op_mode; 
                 mod_pressed_during_tap_hold_phase = false; 
                 op_mode_clicks_count = 0; 
+                op_mode_select_omega = false;
+                op_mode_omega_threshold_announced = false;
                 status_led_set_override(true, true); 
                 if(aux_led_blink_request_cb) { aux_led_blink_request_cb(); }
                 current_op_mode_sm_state = INPUT_SM_TAP_QUALIFIED_WAITING_RELEASE;
@@ -225,6 +299,16 @@ static void handle_op_mode_sm(uint32_t now, bool tap_pressed_now, bool mod_is_pr
 
         case INPUT_SM_TAP_QUALIFIED_WAITING_RELEASE: 
             if (tap_pressed_now) { 
+                if ((now - tap_press_start_time) >= OP_MODE_TAP_OMEGA_MAX_HOLD_MS) {
+                    reset_op_mode_sm_vars();
+                    break;
+                }
+                if (!op_mode_omega_threshold_announced &&
+                    (now - tap_press_start_time) >= OP_MODE_TAP_OMEGA_HOLD_MS) {
+                    op_mode_omega_threshold_announced = true;
+                    op_mode_select_omega = true;
+                    omega_aux_blink_sequence_start(now);
+                }
                 if (mod_button_is_debounced_pressed) {
                     status_led_set_override(true, false);
                 } else {
@@ -289,7 +373,17 @@ static void handle_op_mode_sm(uint32_t now, bool tap_pressed_now, bool mod_is_pr
                  if (!tap_confirm_action_taken_this_press) {
                     if (op_mode_clicks_count > 0) { 
                         if (aux_led_blink_request_cb) { aux_led_blink_request_cb(); }
-                        if (op_mode_change_cb) { op_mode_change_cb(op_mode_clicks_count); }
+                        if (op_mode_change_cb) {
+                            if (op_mode_select_omega) {
+                                uint8_t n = op_mode_clicks_count;
+                                if (n > 10) {
+                                    n = (uint8_t)(((n - 1u) % 10u) + 1u);
+                                }
+                                op_mode_change_cb((uint8_t)(n + 10u));
+                            } else {
+                                op_mode_change_cb(op_mode_clicks_count);
+                            }
+                        }
                     }
                     reset_op_mode_sm_vars(); 
                     tap_confirm_action_taken_this_press = true; 
@@ -307,6 +401,8 @@ static void handle_op_mode_sm(uint32_t now, bool tap_pressed_now, bool mod_is_pr
             reset_op_mode_sm_vars();
             break;
     }
+
+    pump_omega_aux_blink_sequence(now);
 }
 
 static void input_pins_init(void) {

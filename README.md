@@ -71,10 +71,12 @@ Release-style artifacts (renamed binaries, hex) appear under `.pio/build/blackpi
 
 ### Mode change and saving (step by step)
 
-- **Enter mode change:** Hold **Tap (PA0)** longer than `OP_MODE_TAP_HOLD_DURATION_MS` (typically ~1–2 s; exact value in `variables.h`). Status LED (PA15) goes **solid ON**. Aux LED (PA3) blinks once.
+- **Enter mode change:** Hold **Tap (PA0)** longer than `OP_MODE_TAP_HOLD_DURATION_MS` (typically ~1 s; exact value in `variables.h`). Status LED (PA15) goes **solid ON**. Aux LED (PA3) blinks **once** (soft timer in firmware).
+- **Omega — modes 11–20 (optional):** From the same hold, **keep holding Tap** until `OP_MODE_TAP_OMEGA_HOLD_MS` (~**3 s** from the **first** press). Aux LED (PA3) then shows **two short flashes** separated by a dark gap (not a single long blink). That arms **Omega**: each **Mode** click still counts as before, but **Tap** confirm selects operational mode **N + 10** (modes 11–20 in the table below), i.e. callback argument **N + 10** for N = 1…10. If you **release Tap after the 1 s qualify but before the 3 s Omega threshold**, you stay on the **base** path (modes **1–10** only).
+- **Abort long hold:** If Tap is never released within `OP_MODE_TAP_OMEGA_MAX_HOLD_MS` (~**5 s** from first press), the mode-change UI exits without applying a new mode.
 - **Release Tap:** Status LED stays solid ON. A **5 s** window starts (`OP_MODE_TIMEOUT_SAVE_MS`).
 - **Option A — Save only:** Do **not** press Mode within 5 s. Current state (tempo, mode, per-mode swap, mode-specific parameters such as swing/chaos and all MOD-driven values in modes 11–20) is **written to Flash**. Aux blinks once; Status LED returns to normal blinking for the current mode. This is the **primary save path**.
-- **Option B — Change mode:** Press **Mode (PA1)** within 5 s (cancels the save timer). Each **release** of Mode increments the internal click counter toward the next operational mode. Status LED is OFF while Mode is held, ON when released; Aux does **not** blink on each Mode press. When the desired mode is selected, press **Tap** briefly to **confirm**. The new mode activates; Aux blinks once. **Saving** the new configuration still requires running **Option A** later (hold/release Tap, wait 5 s without Mode).
+- **Option B — Change mode:** Press **Mode (PA1)** within 5 s (cancels the save timer). Each **release** of Mode increments the internal click counter toward the next operational mode. Status LED is OFF while Mode is held, ON when released; Aux does **not** blink on each Mode press. When the desired mode is selected, press **Tap** briefly to **confirm**. If **Omega** was armed (double Aux flash while holding Tap), the counter maps to **modes 11–20**; otherwise to **modes 1–10**. The new mode activates; Aux blinks once. **Saving** the new configuration still requires running **Option A** later (hold/release Tap, wait 5 s without Mode).
 - **Abort:** If you pressed Mode at least once but never confirm with Tap, after `OP_MODE_CONFIRM_TIMEOUT_MS` (~10 s) the UI exits and the **previous** mode is restored; nothing is saved.
 
 ### Explore outputs (by mode family)
@@ -121,7 +123,7 @@ Mode order and **status LED blink count** (1 = Default … 20 = Accumulate):
 ## Project structure (firmware)
 
 - **`src/main.c`** — Init, main loop, callbacks, aux LED timer, `millis()`; load/save wiring for chaos divisor, swing profiles, fixed-mode bank, and rhythm-mode MOD states (12–20).
-- **`src/input_handler.c`** — Pin init, op-mode state machine, tap-interval averaging, external clock handoff, tempo callback dispatch, calc/fixed swap, short-MOD dispatch for modes 12–20.
+- **`src/input_handler.c`** — Pin init, op-mode state machine (including **Omega**: extended Tap hold for modes 11–20), tap-interval averaging, external clock handoff, tempo callback dispatch, calc/fixed swap, short-MOD dispatch for modes 12–20.
 - **`src/clock_manager.c`** — F1 generation, `mode_context_t`, dispatch to `mode_*_update`.
 - **`src/drivers/`** — `io`, `tap`, `ext_clock`, `persistence`, `rtc`.
 - **`src/modes/`** — One implementation per operational mode; `modes.h` / `modes.c` registry.
@@ -151,7 +153,7 @@ For **how to add a mode** or **debug**, see **`AGENTS.md`**.
 
 ### Inputs (detail)
 
-- **Op-mode sequence:** `input_handler.c` state machine (`handle_op_mode_sm`): hold tap → release → 5 s save window or MOD clicks → TAP confirm; confirm timeout can abort to previous mode.
+- **Op-mode sequence:** `input_handler.c` state machine (`handle_op_mode_sm`): hold tap (≥ `OP_MODE_TAP_HOLD_DURATION_MS`) → optional continued hold to `OP_MODE_TAP_OMEGA_HOLD_MS` for Omega (modes 11–20) → release → 5 s save window or MOD clicks → TAP confirm; confirm timeout can abort to previous mode. Omega Aux pattern uses `set_output(JACK_OUT_AUX_LED_PA3, …)` with timings `OMEGA_AUX_PULSE_ON_MS` / `OMEGA_AUX_INTER_PULSE_GAP_MS` in `variables.h`; see **`AGENTS.md`** for coordination with `main.c`.
 - **Calc swap:** short MOD or PB4 (when idle path allows); **fixed** uses MOD for **bank**; **modes 12–20** use short MOD for **mode UI** (see table), PB4 still swaps calc A/B.
 
 ---

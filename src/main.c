@@ -48,6 +48,11 @@ uint32_t millis(void) {
 }
 #endif
 
+/** Clears PA3 soft-blink deadline so input_handler can drive a distinct double-flash (Omega) without merge/cutoff. */
+void krono_pa3_soft_blink_cancel(void) {
+	status_led_pa3_blink_end_time = 0;
+}
+
 // --- Helper Functions ---
 static void save_current_state(void);
 
@@ -294,9 +299,11 @@ int main(void) {
         status_led_update(now); 
 
                 
-        if (status_led_pa3_blink_end_time != 0 && now >= status_led_pa3_blink_end_time) {
-            set_output(JACK_OUT_AUX_LED_PA3, false); 
-            status_led_pa3_blink_end_time = 0; 
+        if (!input_handler_omega_aux_blink_sequence_active()
+            && status_led_pa3_blink_end_time != 0
+            && now >= status_led_pa3_blink_end_time) {
+            set_output(JACK_OUT_AUX_LED_PA3, false);
+            status_led_pa3_blink_end_time = 0;
         }
 
         
