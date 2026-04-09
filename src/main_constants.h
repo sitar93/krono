@@ -37,6 +37,9 @@
 #define DEBOUNCE_DELAY_MS 50      // Debounce delay for tap input in ms
 #define TAP_TIMEOUT_MS 10000      // Timeout for tap sequence in ms (10 seconds)
 
+// --- MOD gestures (modes 12–20): double-click window after first short press ---
+#define MOD_GESTURE_DOUBLE_GAP_MS 400
+
 // --- Mode Switching ---
 // NEW: Tap Held + Mode Press Logic
 #define BUTTON_DEBOUNCE_MS              25  // ms - General debounce time for single button presses (Tap, Mode)
@@ -45,7 +48,7 @@
 
 // --- Status LED ---
 #define STATUS_LED_PIN JACK_OUT_STATUS_LED_PA15 // Use the enum for PA15
-// Uses parameters from variables.h (STATUS_LED_BASE_INTERVAL_MS, STATUS_LED_END_OFF_MS)
+// Uses parameters from variables.h (status LED N/L on-times and inter-pulse vs end-of-sequence gaps)
 // Old constants for reference (can be removed if variables.h is always used):
 // #define STATUS_BLINK_ON_MS 100
 // #define STATUS_BLINK_OFF_MS 150

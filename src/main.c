@@ -20,6 +20,7 @@
 #include "variables.h"
 #include "main_constants.h"
 #include "mode_state.h"
+#include "krono_aux_led_pattern.h"
 
 #include "modes/mode_fixed.h"
 
@@ -34,6 +35,16 @@ static uint32_t last_save_time = 0;
 static volatile uint32_t status_led_pa3_blink_end_time = 0; 
 #define STATUS_LED_PA3_BLINK_DURATION_MS 100 
 
+void krono_aux_led_cancel_soft_timer(void) {
+    status_led_pa3_blink_end_time = 0;
+}
+
+static void pa3_soft_blink_arm(void) {
+    krono_aux_led_pattern_cancel();
+    set_output(JACK_OUT_AUX_LED_PA3, true);
+    status_led_pa3_blink_end_time = millis() + STATUS_LED_PA3_BLINK_DURATION_MS;
+}
+
 // --- SysTick ---
 volatile uint32_t system_millis = 0;
 
@@ -47,11 +58,6 @@ uint32_t millis(void) {
 	return system_millis;
 }
 #endif
-
-/** Clears PA3 soft-blink deadline so input_handler can drive a distinct double-flash (Omega) without merge/cutoff. */
-void krono_pa3_soft_blink_cancel(void) {
-	status_led_pa3_blink_end_time = 0;
-}
 
 // --- Helper Functions ---
 static void save_current_state(void);
@@ -74,8 +80,7 @@ static void configure_unused_pins(void);
 static void on_tap_tempo_change(uint32_t new_interval_ms, bool is_external_clock, uint32_t event_timestamp_ms) {
     if (new_interval_ms > 0) {
         clock_manager_set_internal_tempo(new_interval_ms, is_external_clock, event_timestamp_ms);
-        set_output(JACK_OUT_AUX_LED_PA3, true);
-        status_led_pa3_blink_end_time = millis() + STATUS_LED_PA3_BLINK_DURATION_MS;
+        pa3_soft_blink_arm();
     }
 }
 
@@ -103,8 +108,7 @@ static void on_op_mode_change(uint8_t mode_clicks) {
         status_led_set_mode(g_current_op_mode); 
         status_led_reset(); 
 
-        set_output(JACK_OUT_AUX_LED_PA3, true);
-        status_led_pa3_blink_end_time = millis() + STATUS_LED_PA3_BLINK_DURATION_MS;
+        pa3_soft_blink_arm();
         
         state_changed_for_saving = true; 
     }
@@ -123,8 +127,7 @@ static void on_calc_mode_change(void) {
      }
 #endif
 
-    set_output(JACK_OUT_AUX_LED_PA3, true);
-    status_led_pa3_blink_end_time = millis() + STATUS_LED_PA3_BLINK_DURATION_MS;
+    pa3_soft_blink_arm();
 }
 
 static void on_fixed_bank_change(void) {
@@ -136,8 +139,7 @@ static void on_fixed_bank_change(void) {
         mode_fixed_set_bank(next_bank);
         current_state.fixed_bank = next_bank;
         
-        set_output(JACK_OUT_AUX_LED_PA3, true);
-        status_led_pa3_blink_end_time = millis() + STATUS_LED_PA3_BLINK_DURATION_MS;
+        pa3_soft_blink_arm();
     }
 }
 
@@ -146,15 +148,13 @@ static void on_save_request_from_input_handler(void) {
 }
 
 static void on_aux_led_blink_request_from_input_handler(void) {
-    set_output(JACK_OUT_AUX_LED_PA3, true);
-    status_led_pa3_blink_end_time = millis() + STATUS_LED_PA3_BLINK_DURATION_MS;
+    pa3_soft_blink_arm();
 }
 
 static void on_mod_press(mod_press_event_t event, uint32_t timestamp_ms) {
     (void)event;
     mode_dispatch_mod_press(g_current_op_mode, MOD_PRESS_EVENT_SINGLE, timestamp_ms);
-    set_output(JACK_OUT_AUX_LED_PA3, true);
-    status_led_pa3_blink_end_time = millis() + STATUS_LED_PA3_BLINK_DURATION_MS;
+    pa3_soft_blink_arm();
 }
 
 // --- Pin Configuration ---
@@ -298,8 +298,9 @@ int main(void) {
         clock_manager_update(); 
         status_led_update(now); 
 
-                
-        if (!input_handler_omega_aux_blink_sequence_active()
+        krono_aux_led_pattern_pump(now);
+
+        if (!krono_aux_led_pattern_active()
             && status_led_pa3_blink_end_time != 0
             && now >= status_led_pa3_blink_end_time) {
             set_output(JACK_OUT_AUX_LED_PA3, false);

@@ -10,16 +10,55 @@
 static uint32_t last_blink_time = 0;
 static bool led_state = false;
 static operational_mode_t current_mode_for_led = MODE_DEFAULT;
-static uint8_t blink_count = 0;        // How many blinks have occurred in the current sequence
-static uint32_t sequence_start_time = 0; // When the current blink sequence started
+static uint8_t blink_count = 0;        // Completed pulses in the current sequence
+static uint32_t active_on_duration_ms = STATUS_LED_BASE_INTERVAL_MS; // ON time for current pulse
+static uint32_t pending_off_gap_ms = STATUS_LED_INTER_PULSE_OFF_MS;  // dark time before next pulse
 
 // --- Override State ---
 static bool led_override_active = false;
 static bool led_override_fixed_state = false;
 
-// Helper to turn LED on/off
+/** User-facing mode number 1..20 from enum index. */
+static uint8_t status_led_user_mode_number(operational_mode_t mode) {
+    if (mode >= NUM_OPERATIONAL_MODES) {
+        return 1;
+    }
+    return (uint8_t)mode + 1u;
+}
+
+/** Total pulses in one loop: 1–9 → N×; 10 → L; 11–19 → L + (m−10)×N; 20 → L,L. */
+static uint8_t status_led_pulse_count(operational_mode_t mode) {
+    uint8_t u = status_led_user_mode_number(mode);
+    if (u <= 9u) {
+        return u;
+    }
+    if (u == 10u) {
+        return 1u;
+    }
+    if (u <= 19u) {
+        return (uint8_t)(1u + (u - 10u));
+    }
+    return 2u;
+}
+
+/** Pulse index 0..count−1: true = long ON, false = normal ON. */
+static bool status_led_pulse_is_long(operational_mode_t mode, uint8_t pulse_index) {
+    uint8_t u = status_led_user_mode_number(mode);
+    if (u <= 9u) {
+        return false;
+    }
+    if (u == 10u) {
+        return true;
+    }
+    if (u <= 19u) {
+        return (pulse_index == 0u);
+    }
+    return true; /* 20: [L,L] */
+}
+
+/* Logical true = LED visibly on. Drive pin directly; older !on caused “dark” pauses to read as lit on boards where ON = GPIO high. */
 static void set_led(bool on) {
-    set_output(STATUS_LED_PIN, !on); // Inverted output
+    set_output(STATUS_LED_PIN, on);
     led_state = on;
 }
 
@@ -49,8 +88,8 @@ void status_led_reset(void) {
         // --- END DEBUG ---
 
         blink_count = 0;
-        sequence_start_time = millis();
-        last_blink_time = sequence_start_time; // Start sequence immediately
+        pending_off_gap_ms = STATUS_LED_INTER_PULSE_OFF_MS ? STATUS_LED_INTER_PULSE_OFF_MS : 1u;
+        last_blink_time = millis(); // Start sequence immediately
         set_led(false); // Start with LED off
      }
 }
@@ -63,69 +102,48 @@ void status_led_update(uint32_t current_time_ms) {
         return;
     }
 
-    // --- Normal Blinking Logic --- 
-    // Determine the number of blinks based on the mode
-    uint8_t blinks = 1; // Default to 1 blink
-    switch (current_mode_for_led) {
-        case MODE_DEFAULT:       blinks = 1; break;
-        case MODE_EUCLIDEAN:     blinks = 2; break;
-        case MODE_MUSICAL:       blinks = 3; break;
-        case MODE_PROBABILISTIC: blinks = 4; break;
-        case MODE_SEQUENTIAL:    blinks = 5; break;
-        case MODE_SWING:         blinks = 6; break;
-        case MODE_POLYRHYTHM:    blinks = 7; break;
-        case MODE_LOGIC:         blinks = 8; break;
-        case MODE_PHASING:       blinks = 9; break;
-        case MODE_CHAOS:         blinks = 10; break;
-        case MODE_FIXED:         blinks = 11; break;
-        case MODE_DRIFT:         blinks = 12; break;
-        case MODE_FILL:          blinks = 13; break;
-        case MODE_SKIP:          blinks = 14; break;
-        case MODE_STUTTER:       blinks = 15; break;
-        case MODE_MORPH:         blinks = 16; break;
-        case MODE_MUTE:          blinks = 17; break;
-        case MODE_DENSITY:       blinks = 18; break;
-        case MODE_SONG:          blinks = 19; break;
-        case MODE_ACCUMULATE:    blinks = 20; break;
-        default: blinks = 1; break; // Safe default for unknown modes
-    }
-    uint32_t on_duration = STATUS_LED_BASE_INTERVAL_MS;
-    uint32_t off_duration = STATUS_LED_BASE_INTERVAL_MS;
-    uint32_t sequence_pause = STATUS_LED_END_OFF_MS;
-
-    if (on_duration == 0) on_duration = 1;
-    if (off_duration == 0) off_duration = 1;
+    // --- Normal Blinking Logic ---
+    uint8_t const total_pulses = status_led_pulse_count(current_mode_for_led);
+    /* Inverted vs older firmware: long dark gap *between* pulses; short gap *after* full pattern. */
+    uint32_t const sequence_pause = STATUS_LED_SEQUENCE_GAP_MS;
 
     // --- State Machine for Blinking --- //
 
-    // Check if the sequence pause is over and we need to restart
-    if (blink_count >= blinks) { // Use the calculated 'blinks' variable
+    if (blink_count >= total_pulses) {
         if (current_time_ms - last_blink_time >= sequence_pause) {
-            // Restart sequence
             blink_count = 0;
-            last_blink_time = current_time_ms; // Base time for first blink OFF duration
-            set_led(false); // Ensure LED is off at the start
-            // Don't return, proceed to check if we need to turn ON immediately
+            pending_off_gap_ms = STATUS_LED_INTER_PULSE_OFF_MS ? STATUS_LED_INTER_PULSE_OFF_MS : 1u;
+            last_blink_time = current_time_ms;
+            set_led(false);
         } else {
-             // Still in pause, ensure LED is off and wait
-             if(led_state) { set_led(false); }
-             return;
+            if (led_state) {
+                set_led(false);
+            }
+            return;
         }
     }
 
-    // Handle blinking within the sequence
-    if (!led_state) { // If LED is currently OFF
-         // Check if OFF duration has passed (or if we just restarted)
-        if (current_time_ms - last_blink_time >= off_duration) {
-            set_led(true); // Turn ON
-            last_blink_time = current_time_ms; // Mark time ON
+    if (!led_state) {
+        uint32_t const gap = pending_off_gap_ms ? pending_off_gap_ms : 1u;
+        if (current_time_ms - last_blink_time >= gap) {
+            active_on_duration_ms = status_led_pulse_is_long(current_mode_for_led, blink_count)
+                                          ? STATUS_LED_LONG_ON_MS
+                                          : STATUS_LED_BASE_INTERVAL_MS;
+            if (active_on_duration_ms == 0) {
+                active_on_duration_ms = 1;
+            }
+            set_led(true);
+            last_blink_time = current_time_ms;
         }
-    } else { // If LED is currently ON
-        // Check if ON duration has passed
-        if (current_time_ms - last_blink_time >= on_duration) {
-            set_led(false); // Turn OFF
-            last_blink_time = current_time_ms; // Mark time OFF
-            blink_count++; // Increment count after turning OFF
+    } else {
+        if (current_time_ms - last_blink_time >= active_on_duration_ms) {
+            uint8_t const finished_pulse_idx = blink_count;
+            set_led(false);
+            last_blink_time = current_time_ms;
+            blink_count++;
+            pending_off_gap_ms = status_led_pulse_is_long(current_mode_for_led, finished_pulse_idx)
+                                     ? (STATUS_LED_AFTER_LONG_OFF_MS ? STATUS_LED_AFTER_LONG_OFF_MS : 1u)
+                                     : (STATUS_LED_INTER_PULSE_OFF_MS ? STATUS_LED_INTER_PULSE_OFF_MS : 1u);
         }
     }
 }

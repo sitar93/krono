@@ -34,14 +34,27 @@ KRONO is a multimodal time control module for Eurorack synthesizers, implemented
 - **PA1:** Mode / calculation swap (button to GND)
 - **PB3:** External clock input — *conflicts with default SWO (SWD)*
 - **PB4:** External gate (calculation swap) — *can conflict with JTAG (e.g. NJTRST)*
-- **PA15:** Status LED (blink pattern = operational mode; solid during mode-change UI)
-- **PA3:** Aux LED (short blinks for tempo, swap, mode UI, save)
+- **PA15:** Status LED — see **LEDs: behavior vs firmware** below and `variables.h` / `status_led.c`.
+- **PA3:** Aux LED — see **LEDs: behavior vs firmware** below; tempo, swap, mode-change / save feedback, Omega single blink (same style as qualify).
 - **Group A (`JACK_OUT_1A`…`6A`):** PB0, PB1, PA2, PB15, PB5, PB6  
 - **Group B (`JACK_OUT_1B`…`6B`):** PB14, PB13, PB12, PB8, PB9, PB10  
 
 Exact enums: `src/drivers/io.h` (`JACK_OUT_...`).
 
 **Debugging:** PB3/PB4 usage often prevents normal SWD/JTAG. Prefer **DFU upload** (see below).
+
+### LEDs: behavior vs firmware
+
+What you see on the panel follows **logical** on/off in firmware, mapped to GPIO via `set_output()` in `drivers/io.c` (active level depends on the LED wiring).
+
+| LED | Pin | When it looks **ON** (typical Krono wiring) | Main code paths |
+|-----|-----|---------------------------------------------|-----------------|
+| **Status** | PA15 (`JACK_OUT_STATUS_LED_PA15`) | `status_led.c` calls `set_led(true)` → `set_output(STATUS_LED_PIN, true)` (GPIO **high** = logical on). **Off** during gaps and pulses uses `set_led(false)` → GPIO **low**. During mode-change UI, `status_led_set_override()` holds a fixed logical on/off (solid “on” while waiting). | Normal: `status_led_update()` N/L pattern. Override: `input_handler.c` during TAP/MOD mode-change states. |
+| **Aux** | PA3 (`JACK_OUT_AUX_LED_PA3`) | `main.c` arms short blinks via `pa3_soft_blink_arm()` (`set_output` + `status_led_pa3_blink_end_time`, typically 100 ms). Optional multi-pulse sequences use `krono_aux_led_pattern_*` in `krono_aux_led_pattern.c`; while a pattern is active, the main loop skips the simple off-timeout so pulses are not clipped. GPIO **high** = logical on (same convention as Status). | Tempo/swap/save/calc callbacks, mode-change qualify/Omega feedback (`aux_led_blink_request_cb`), future multi-pulse tiers via `krono_aux_led_pattern_start()`. |
+
+**Status pattern (user modes 1–20):** short **N** pulses use `STATUS_LED_BASE_INTERVAL_MS` ON time; long **L** uses `STATUS_LED_LONG_ON_MS`. Dark gap after a **normal** pulse: `STATUS_LED_INTER_PULSE_OFF_MS`; after a **long** pulse: `STATUS_LED_AFTER_LONG_OFF_MS`; after the **whole** pattern, before it repeats: `STATUS_LED_SEQUENCE_GAP_MS`. Encoding: 1–9 → N×count; 10 → [L]; 11–19 → [L] + (mode−10)×N; 20 → [L,L].
+
+If status “off” ever appears **on** (or the opposite), the panel may use inverted LED wiring — adjust `set_led()` in `status_led.c` (single place).
 
 ---
 
@@ -72,11 +85,11 @@ Release-style artifacts (renamed binaries, hex) appear under `.pio/build/blackpi
 ### Mode change and saving (step by step)
 
 - **Enter mode change:** Hold **Tap (PA0)** longer than `OP_MODE_TAP_HOLD_DURATION_MS` (typically ~1 s; exact value in `variables.h`). Status LED (PA15) goes **solid ON**. Aux LED (PA3) blinks **once** (soft timer in firmware).
-- **Omega — modes 11–20 (optional):** From the same hold, **keep holding Tap** until `OP_MODE_TAP_OMEGA_HOLD_MS` (~**3 s** from the **first** press). Aux LED (PA3) then shows **two short flashes** separated by a dark gap (not a single long blink). That arms **Omega**: each **Mode** click still counts as before, but **Tap** confirm selects operational mode **N + 10** (modes 11–20 in the table below), i.e. callback argument **N + 10** for N = 1…10. If you **release Tap after the 1 s qualify but before the 3 s Omega threshold**, you stay on the **base** path (modes **1–10** only).
+- **Omega — modes 11–20 (optional):** From the same hold, **keep holding Tap** until `OP_MODE_TAP_OMEGA_HOLD_MS` (~**2 s** from the **first** press; see `variables.h`). Aux LED (PA3) blinks **once** (same soft blink as at qualify). That arms **Omega**: each **Mode** click still counts as before, but **Tap** confirm selects operational mode **N + 10** (modes 11–20 in the table below), i.e. callback argument **N + 10** for N = 1…10. If you **release Tap after the 1 s qualify but before the Omega threshold**, you stay on the **base** path (modes **1–10** only).
 - **Abort long hold:** If Tap is never released within `OP_MODE_TAP_OMEGA_MAX_HOLD_MS` (~**5 s** from first press), the mode-change UI exits without applying a new mode.
 - **Release Tap:** Status LED stays solid ON. A **5 s** window starts (`OP_MODE_TIMEOUT_SAVE_MS`).
 - **Option A — Save only:** Do **not** press Mode within 5 s. Current state (tempo, mode, per-mode swap, mode-specific parameters such as swing/chaos and all MOD-driven values in modes 11–20) is **written to Flash**. Aux blinks once; Status LED returns to normal blinking for the current mode. This is the **primary save path**.
-- **Option B — Change mode:** Press **Mode (PA1)** within 5 s (cancels the save timer). Each **release** of Mode increments the internal click counter toward the next operational mode. Status LED is OFF while Mode is held, ON when released; Aux does **not** blink on each Mode press. When the desired mode is selected, press **Tap** briefly to **confirm**. If **Omega** was armed (double Aux flash while holding Tap), the counter maps to **modes 11–20**; otherwise to **modes 1–10**. The new mode activates; Aux blinks once. **Saving** the new configuration still requires running **Option A** later (hold/release Tap, wait 5 s without Mode).
+- **Option B — Change mode:** Press **Mode (PA1)** within 5 s (cancels the save timer). Each **release** of Mode increments the internal click counter toward the next operational mode. Status LED is OFF while Mode is held, ON when released; Aux does **not** blink on each Mode press. When the desired mode is selected, press **Tap** briefly to **confirm**. If **Omega** was armed (extra Aux blink while still holding Tap past the Omega threshold), the counter maps to **modes 11–20**; otherwise to **modes 1–10**. The new mode activates; Aux blinks once. **Saving** the new configuration still requires running **Option A** later (hold/release Tap, wait 5 s without Mode).
 - **Abort:** If you pressed Mode at least once but never confirm with Tap, after `OP_MODE_CONFIRM_TIMEOUT_MS` (~10 s) the UI exits and the **previous** mode is restored; nothing is saved.
 
 ### Explore outputs (by mode family)
@@ -91,7 +104,7 @@ Release-style artifacts (renamed binaries, hex) appear under `.pio/build/blackpi
 
 ## Operational modes (reference)
 
-Mode order and **status LED blink count** (1 = Default … 20 = Accumulate):
+Mode order and **status LED pattern** (user mode 1 = Default … 20 = Accumulate; N = short ON, L = long ON; dark gaps from `STATUS_LED_INTER_PULSE_OFF_MS`, `STATUS_LED_AFTER_LONG_OFF_MS`, and end-of-loop `STATUS_LED_SEQUENCE_GAP_MS` in `variables.h`):
 
 | # | Mode | Summary |
 |---|------|---------|
@@ -122,7 +135,8 @@ Mode order and **status LED blink count** (1 = Default … 20 = Accumulate):
 
 ## Project structure (firmware)
 
-- **`src/main.c`** — Init, main loop, callbacks, aux LED timer, `millis()`; load/save wiring for chaos divisor, swing profiles, fixed-mode bank, and rhythm-mode MOD states (12–20).
+- **`src/main.c`** — Init, main loop, callbacks, PA3 soft blink + `krono_aux_led_pattern_pump`, `millis()`; load/save wiring for chaos divisor, swing profiles, fixed-mode bank, and rhythm-mode MOD states (12–20).
+- **`src/krono_aux_led_pattern.c`** / **`.h`** — Optional multi-pulse Aux LED sequences (coexists with soft blink in `main.c`).
 - **`src/input_handler.c`** — Pin init, op-mode state machine (including **Omega**: extended Tap hold for modes 11–20), tap-interval averaging, external clock handoff, tempo callback dispatch, calc/fixed swap, short-MOD dispatch for modes 12–20.
 - **`src/clock_manager.c`** — F1 generation, `mode_context_t`, dispatch to `mode_*_update`.
 - **`src/drivers/`** — `io`, `tap`, `ext_clock`, `persistence`, `rtc`.
@@ -153,7 +167,7 @@ For **how to add a mode** or **debug**, see **`AGENTS.md`**.
 
 ### Inputs (detail)
 
-- **Op-mode sequence:** `input_handler.c` state machine (`handle_op_mode_sm`): hold tap (≥ `OP_MODE_TAP_HOLD_DURATION_MS`) → optional continued hold to `OP_MODE_TAP_OMEGA_HOLD_MS` for Omega (modes 11–20) → release → 5 s save window or MOD clicks → TAP confirm; confirm timeout can abort to previous mode. Omega Aux pattern uses `set_output(JACK_OUT_AUX_LED_PA3, …)` with timings `OMEGA_AUX_PULSE_ON_MS` / `OMEGA_AUX_INTER_PULSE_GAP_MS` in `variables.h`; see **`AGENTS.md`** for coordination with `main.c`.
+- **Op-mode sequence:** `input_handler.c` state machine (`handle_op_mode_sm`): hold tap (≥ `OP_MODE_TAP_HOLD_DURATION_MS`) → optional continued hold to `OP_MODE_TAP_OMEGA_HOLD_MS` for Omega (modes 11–20) → release → 5 s save window or MOD clicks → TAP confirm; confirm timeout can abort to previous mode. Omega feedback uses the same `aux_led_blink_request_cb()` soft blink as qualify; multi-pulse Aux (e.g. a future tier) can use `krono_aux_led_pattern_start()` with `AUX_LED_MULTI_PULSE_ON_MS` / `AUX_LED_MULTI_PULSE_GAP_MS` in `variables.h` — see **`AGENTS.md`**.
 - **Calc swap:** short MOD or PB4 (when idle path allows); **fixed** uses MOD for **bank**; **modes 12–20** use short MOD for **mode UI** (see table), PB4 still swaps calc A/B.
 
 ---

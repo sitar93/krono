@@ -20,11 +20,20 @@
 
 // --- Status LED Timing ---
 
-/** @brief Base time unit for status LED blinking (ms). Adjust for speed. */
-#define STATUS_LED_BASE_INTERVAL_MS 200
+/** @brief Normal (N) pulse ON time (ms). */
+#define STATUS_LED_BASE_INTERVAL_MS 120
 
-/** @brief Minimum duration LED stays on after a blink sequence finishes (ms). */
-#define STATUS_LED_END_OFF_MS 500
+/** @brief Long (L) pulse ON time (ms); keep much larger than N so L is unambiguous. */
+#define STATUS_LED_LONG_ON_MS 1200
+
+/** @brief LED off between consecutive pulses after a normal (N) pulse (ms). */
+#define STATUS_LED_INTER_PULSE_OFF_MS 500
+
+/** @brief LED off after a long (L) pulse, before the next pulse (ms); slightly longer than N gap. */
+#define STATUS_LED_AFTER_LONG_OFF_MS 650
+
+/** @brief LED off after the full pattern ends, before the next repetition (ms). */
+#define STATUS_LED_SEQUENCE_GAP_MS 400
 
 // --- Input Handler Timing ---
 
@@ -39,17 +48,18 @@
 /** @brief Minimum hold duration (ms) for TAP (PA0) before MODE (PA1) presses are counted for Op Mode switching. */
 #define OP_MODE_TAP_HOLD_DURATION_MS 1000
 
-/** @brief From same TAP press start: hold past this (ms) while still holding after qualify → Omega (PA3 double blink); MOD→modes 11–20. */
-#define OP_MODE_TAP_OMEGA_HOLD_MS 3000
+/** @brief From same TAP press start: hold past this (ms) while still holding after qualify → Omega (same Aux blink as qualify); MOD→modes 11–20. */
+#define OP_MODE_TAP_OMEGA_HOLD_MS 2000
 
 /** @brief Abort op-mode change SM if TAP never released within this total hold from first press (ms). */
 #define OP_MODE_TAP_OMEGA_MAX_HOLD_MS 5000
 
-/** @brief Omega indicator: each flash ON time on PA3 (ms). */
-#define OMEGA_AUX_PULSE_ON_MS 55
-
-/** @brief Omega indicator: dark gap between the two flashes (ms). */
-#define OMEGA_AUX_INTER_PULSE_GAP_MS 100
+/**
+ * Multi-pulse Aux (PA3) timings for krono_aux_led_pattern_start() — e.g. a future hold tier (~3 s) for modes 21–30
+ * with two distinct flashes (not used by Omega today; Omega uses the single 100 ms soft blink).
+ */
+#define AUX_LED_MULTI_PULSE_ON_MS 55
+#define AUX_LED_MULTI_PULSE_GAP_MS 100
 
 /** @brief Time window (ms) after the LAST Mode press (while Tap is held) to wait for another Mode press before finalizing Op Mode selection. */
 #define OP_MODE_MULTI_PRESS_WINDOW_MS 500
