@@ -26,6 +26,11 @@ This work is licensed under a
 
 KRONO is a multimodal time control module for Eurorack synthesizers, implemented on an **STM32F411CE** microcontroller (Black Pill–class boards on the Krono PCB; STM32F401 may work with target changes). It provides tap and external-clock tempo, multiple rhythmic output modes, and **persistent state** in internal Flash.
 
+## Related links
+
+- **Official module page:** [jolin.tech/krono](https://jolin.tech/krono)
+- **VCV Rack plugin repository:** [sitar93/krono_vcv](https://github.com/sitar93/krono_vcv)
+
 ---
 
 ## Hardware setup
