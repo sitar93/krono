@@ -14,14 +14,22 @@
 void clock_manager_init(operational_mode_t initial_op_mode, uint32_t initial_tempo_interval);
 
 /**
- * @brief Sets the tempo interval. If the tempo is from an external clock,
- *        it also resets the F1 pulse phase to align with the external event.
+ * @brief Sets the tempo interval (tap or external validated interval).
+ *        Does not reset f1_tick_counter. Beat phase is aligned to event_timestamp_ms
+ *        (tap press time from input_tempo, or ext_clock validating edge) so ongoing taps
+ *        stay on the same grid as the internal F1 clock.
  *
  * @param interval_ms The new tempo interval in milliseconds.
- * @param is_external_clock True if the tempo change is due to an external clock event.
- * @param event_timestamp_ms Timestamp of the event that triggered the tempo change.
+ * @param is_external_clock Unused (same phase logic for tap and external interval updates).
+ * @param event_timestamp_ms Beat anchor (ms); if 0 or in the future, uses millis().
  */
 void clock_manager_set_internal_tempo(uint32_t interval_ms, bool is_external_clock, uint32_t event_timestamp_ms);
+
+/**
+ * @brief Arm F1 pulse + tempo on the next clock_manager_update (tap quadruple boundary).
+ *        Ensures mode update sees f1_rising_edge in the same frame as the 1A/1B pulse.
+ */
+void clock_manager_arm_tap_quadruple_boundary(uint32_t interval_ms, uint32_t event_timestamp_ms);
 
 /**
  * @brief Gets the current active tempo interval being used by the clock manager.
@@ -47,6 +55,12 @@ void clock_manager_set_operational_mode(operational_mode_t new_mode);
  * @param is_calc_mode_change True if the sync is due to a calculation mode change, false otherwise (e.g., op mode change).
  */
 void clock_manager_sync_flags(bool is_calc_mode_change);
+
+/**
+ * @brief Restarts the internal F1 beat phase at the current time (no 1A/1B auto pulse).
+ *        Used by Gamma mode 21 MOD/CV reset so the next tick aligns to “now” without catch-up bursts.
+ */
+void clock_manager_restart_beat_phase_now(void);
 
 /**
  * @brief Sets the calculation mode (Normal/Swapped) within the mode context.

@@ -83,6 +83,8 @@ void exti0_isr(void) {
         last_tap_time_ms = now_ms;
         last_accept_cycles = now_cyc;
         first_tap_registered = true;
+        tap_interval = 0;
+        tap_detected_flag = true;
         return;
     }
 

@@ -51,6 +51,9 @@
 /** @brief From same TAP press start: hold past this (ms) while still holding after qualify → Omega (same Aux blink as qualify); MOD→modes 11–20. */
 #define OP_MODE_TAP_OMEGA_HOLD_MS 2000
 
+/** @brief From TAP press start: hold past this (ms) while still holding → Gamma arm; PA3 double short pulse; MOD→modes 21+ (N+20). */
+#define OP_MODE_TAP_GAMMA_HOLD_MS 3000
+
 /** @brief Abort op-mode change SM if TAP never released within this total hold from first press (ms). */
 #define OP_MODE_TAP_OMEGA_MAX_HOLD_MS 5000
 

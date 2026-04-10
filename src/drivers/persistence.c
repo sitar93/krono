@@ -53,7 +53,16 @@ static krono_state_t get_default_krono_state(void) {
     default_state.accumulate_active_mask = 1u;
     memset(default_state.accumulate_phase_offsets, 0, sizeof default_state.accumulate_phase_offsets);
     memset(default_state.accumulate_variation_masks, 0, sizeof default_state.accumulate_variation_masks);
-    
+    default_state.gamma_seq_freeze_frozen = false;
+    default_state.gamma_seq_freeze_step = 0;
+    default_state.gamma_seq_trip_pattern = 0;
+    default_state.gamma_seq_trip_step = 0;
+    default_state.gamma_portals_div_on_a = false;
+    default_state.gamma_coin_invert = false;
+    default_state.gamma_ratchet_double = false;
+    default_state.gamma_antiratchet_half = false;
+    default_state.gamma_startstop_muted = false;
+
     default_state.checksum = 0; // Checksum must be calculated last over a zeroed checksum field
     default_state.checksum = persistence_calculate_checksum(&default_state);
     return default_state;
@@ -119,6 +128,15 @@ bool persistence_load_state(krono_state_t *state) {
     }
     for (int i = 0; i < MODE_RHYTHM_NUM_OUTPUTS; i++) {
         state->accumulate_phase_offsets[i] &= 0x0Fu;
+    }
+    if (state->gamma_seq_freeze_step >= 12u) {
+        state->gamma_seq_freeze_step = 0;
+    }
+    if (state->gamma_seq_trip_pattern >= 6u) {
+        state->gamma_seq_trip_pattern = 0;
+    }
+    if (state->gamma_seq_trip_step > 20u) {
+        state->gamma_seq_trip_step = 0;
     }
 
 #if SAVE_CALC_MODE_PER_OP_MODE

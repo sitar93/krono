@@ -52,6 +52,15 @@ typedef struct {
     uint16_t accumulate_active_mask;
     uint8_t accumulate_phase_offsets[MODE_RHYTHM_NUM_OUTPUTS];
     uint16_t accumulate_variation_masks[MODE_RHYTHM_NUM_OUTPUTS];
+    bool gamma_seq_freeze_frozen;
+    uint8_t gamma_seq_freeze_step; /* 0..11, mode 22 sequencer (1A…6A then 1B…6B) */
+    uint8_t gamma_seq_trip_pattern; /* 0..5 */
+    uint8_t gamma_seq_trip_step;
+    bool gamma_portals_div_on_a; /* mode 26: true = multiply path (T/k swap); false = divide (every k F1) */
+    bool gamma_coin_invert;
+    bool gamma_ratchet_double;
+    bool gamma_antiratchet_half;
+    bool gamma_startstop_muted;
     uint32_t checksum;           // Simple checksum for validation
 } krono_state_t;
 

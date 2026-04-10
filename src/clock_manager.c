@@ -30,12 +30,17 @@ static uint32_t f1_tick_counter = 0; // Counter for mode context
 static bool sync_requested = false; // Flag for mode sync
 static bool calc_mode_just_changed = false; // Flag for mode calc switch
 
+static bool pending_tap_quadruple_boundary = false;
+static uint32_t pending_tap_quadruple_interval_ms = 0;
+static uint32_t pending_tap_quadruple_t0_ms = 0;
+
 // --- Helper Functions ---
 
 static void generate_f1_pulse(void) {
-    // Generate fixed duration pulse on outputs 1A and 1B
-    set_output_high_for_duration(JACK_OUT_1A, DEFAULT_PULSE_DURATION_MS);
-    set_output_high_for_duration(JACK_OUT_1B, DEFAULT_PULSE_DURATION_MS);
+    if (!MODE_SKIPS_AUTO_F1_CLOCK_ON_1AB(current_op_mode)) {
+        set_output_high_for_duration(JACK_OUT_1A, DEFAULT_PULSE_DURATION_MS);
+        set_output_high_for_duration(JACK_OUT_1B, DEFAULT_PULSE_DURATION_MS);
+    }
 }
 
 // Array of function pointers for mode update functions
@@ -59,7 +64,17 @@ static void (*mode_update_functions[NUM_OPERATIONAL_MODES])(const mode_context_t
     [MODE_MUTE]          = mode_mute_update,
     [MODE_DENSITY]       = mode_density_update,
     [MODE_SONG]          = mode_song_update,
-    [MODE_ACCUMULATE]    = mode_accumulate_update
+    [MODE_ACCUMULATE]    = mode_accumulate_update,
+    [MODE_GAMMA_SEQUENTIAL_RESET] = mode_gamma_sequential_reset_update,
+    [MODE_GAMMA_SEQUENTIAL_FREEZE] = mode_gamma_sequential_freeze_update,
+    [MODE_GAMMA_SEQUENTIAL_TRIP] = mode_gamma_sequential_trip_update,
+    [MODE_GAMMA_SEQUENTIAL_FIRE] = mode_gamma_sequential_fire_update,
+    [MODE_GAMMA_SEQUENTIAL_BOUNCE] = mode_gamma_sequential_bounce_update,
+    [MODE_GAMMA_PORTALS] = mode_gamma_portals_update,
+    [MODE_GAMMA_COIN_TOSS] = mode_gamma_coin_toss_update,
+    [MODE_GAMMA_RATCHET] = mode_gamma_ratchet_update,
+    [MODE_GAMMA_ANTI_RATCHET] = mode_gamma_anti_ratchet_update,
+    [MODE_GAMMA_START_STOP] = mode_gamma_start_stop_update
 };
 
 // --- Public Function Implementations ---
@@ -84,20 +99,33 @@ void clock_manager_init(operational_mode_t initial_op_mode, uint32_t initial_tem
     last_update_time_ms = last_f1_pulse_time_ms;
 }
 
+void clock_manager_arm_tap_quadruple_boundary(uint32_t interval_ms, uint32_t event_timestamp_ms) {
+    if (interval_ms > 0) {
+        pending_tap_quadruple_boundary = true;
+        pending_tap_quadruple_interval_ms = interval_ms;
+        pending_tap_quadruple_t0_ms = event_timestamp_ms;
+    }
+}
+
 void clock_manager_set_internal_tempo(uint32_t interval_ms, bool is_external_clock, uint32_t event_timestamp_ms) {
     if (interval_ms > 0) {
+        uint32_t now = millis();
+        uint32_t t0 = event_timestamp_ms;
+        if (t0 == 0u || t0 > now) {
+            t0 = now;
+        }
         active_tempo_interval_ms = interval_ms;
-        if (is_external_clock) {
-            // Align F1 pulse to the external clock event timestamp
-            last_f1_pulse_time_ms = event_timestamp_ms;
-            f1_tick_counter = 0; // Reset counter on external sync
-            generate_f1_pulse(); // Generate immediate pulse to align
-            // The next pulse will be scheduled based on the new active_tempo_interval_ms from this event_timestamp_ms
+        /*
+         * External clock: snap last_f1 <= now on the t0-aligned grid.
+         * Tap tempo uses clock_manager_arm_tap_quadruple_boundary for clicks 4/8/…; this path is
+         * external + ext-clock fallback only here.
+         */
+        if (!is_external_clock) {
+            last_f1_pulse_time_ms = t0;
         } else {
-            // Tap tempo: lock phase to the player's last tap; pulse 1A/1B on that beat.
-            last_f1_pulse_time_ms = event_timestamp_ms;
-            f1_tick_counter = 0;
-            generate_f1_pulse();
+            uint32_t late = now - t0;
+            uint32_t k = late / interval_ms;
+            last_f1_pulse_time_ms = t0 + k * interval_ms;
         }
     }
 }
@@ -127,11 +155,18 @@ void clock_manager_update(void) {
     bool f1_tick_this_cycle = false;
     uint32_t ms_since_last_update = now - last_update_time_ms;
 
-    // No longer check external clock events here. Tempo is managed via callbacks from input_handler.
-
-    // --- Run Internal Timer ---
-    // Catch up missed beats in one frame (slow main loop) without drifting tempo.
-    if (active_tempo_interval_ms > 0 && (now - last_f1_pulse_time_ms) >= active_tempo_interval_ms) {
+    if (pending_tap_quadruple_boundary) {
+        pending_tap_quadruple_boundary = false;
+        uint32_t t0 = pending_tap_quadruple_t0_ms;
+        if (t0 == 0u || t0 > now) {
+            t0 = now;
+        }
+        active_tempo_interval_ms = pending_tap_quadruple_interval_ms;
+        last_f1_pulse_time_ms = t0;
+        generate_f1_pulse();
+        f1_tick_counter += 1u;
+        f1_tick_this_cycle = true;
+    } else if (active_tempo_interval_ms > 0 && (now - last_f1_pulse_time_ms) >= active_tempo_interval_ms) {
         uint32_t late = now - last_f1_pulse_time_ms;
         uint32_t n = late / active_tempo_interval_ms;
         if (n < 1) {
@@ -187,6 +222,14 @@ void clock_manager_sync_flags(bool is_calc_mode_change) {
     f1_tick_counter = 0;
     // Reset internal pulse timer as well?
     // last_f1_pulse_time_ms = millis(); // Maybe not, let mode handle sync
+}
+
+void clock_manager_restart_beat_phase_now(void) {
+    uint32_t now = millis();
+    last_f1_pulse_time_ms = now;
+    f1_tick_counter = 0;
+    sync_requested = true;
+    calc_mode_just_changed = false;
 }
 
 

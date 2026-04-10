@@ -18,7 +18,7 @@ static uint32_t pending_off_gap_ms = STATUS_LED_INTER_PULSE_OFF_MS;  // dark tim
 static bool led_override_active = false;
 static bool led_override_fixed_state = false;
 
-/** User-facing mode number 1..20 from enum index. */
+/** User-facing mode number from enum index (1 = first mode). */
 static uint8_t status_led_user_mode_number(operational_mode_t mode) {
     if (mode >= NUM_OPERATIONAL_MODES) {
         return 1;
@@ -26,34 +26,26 @@ static uint8_t status_led_user_mode_number(operational_mode_t mode) {
     return (uint8_t)mode + 1u;
 }
 
-/** Total pulses in one loop: 1–9 → N×; 10 → L; 11–19 → L + (m−10)×N; 20 → L,L. */
+/**
+ * One loop: modes 1–9 → u× short (N). Modes ≥10 → (tens)× long (L) + (units)× short (N).
+ * Examples: 10=L; 11=L+N; 19=L+9N; 20=L+L; 21=L+L+N; 30=L+L+L. Then sequence gap.
+ */
 static uint8_t status_led_pulse_count(operational_mode_t mode) {
     uint8_t u = status_led_user_mode_number(mode);
-    if (u <= 9u) {
+    if (u < 10u) {
         return u;
     }
-    if (u == 10u) {
-        return 1u;
-    }
-    if (u <= 19u) {
-        return (uint8_t)(1u + (u - 10u));
-    }
-    return 2u;
+    return (uint8_t)(u / 10u + u % 10u);
 }
 
 /** Pulse index 0..count−1: true = long ON, false = normal ON. */
 static bool status_led_pulse_is_long(operational_mode_t mode, uint8_t pulse_index) {
     uint8_t u = status_led_user_mode_number(mode);
-    if (u <= 9u) {
+    if (u < 10u) {
         return false;
     }
-    if (u == 10u) {
-        return true;
-    }
-    if (u <= 19u) {
-        return (pulse_index == 0u);
-    }
-    return true; /* 20: [L,L] */
+    uint8_t tens = (uint8_t)(u / 10u);
+    return pulse_index < tens;
 }
 
 /* Logical true = LED visibly on. Drive pin directly; older !on caused “dark” pauses to read as lit on boards where ON = GPIO high. */

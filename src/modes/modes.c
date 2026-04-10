@@ -35,7 +35,17 @@ static void (*mode_reset_functions[NUM_OPERATIONAL_MODES])(void) = {
     mode_mute_reset,
     mode_density_reset,
     mode_song_reset,
-    mode_accumulate_reset
+    mode_accumulate_reset,
+    mode_gamma_sequential_reset_reset,
+    mode_gamma_sequential_freeze_reset,
+    mode_gamma_sequential_trip_reset,
+    mode_gamma_sequential_fire_reset,
+    mode_gamma_sequential_bounce_reset,
+    mode_gamma_portals_reset,
+    mode_gamma_coin_toss_reset,
+    mode_gamma_ratchet_reset,
+    mode_gamma_anti_ratchet_reset,
+    mode_gamma_start_stop_reset
 };
 
 // Function pointer table for mode init functions
@@ -59,7 +69,17 @@ static void (*mode_init_functions[NUM_OPERATIONAL_MODES])(void) = {
     mode_mute_init,
     mode_density_init,
     mode_song_init,
-    mode_accumulate_init
+    mode_accumulate_init,
+    mode_gamma_sequential_reset_init,
+    mode_gamma_sequential_freeze_init,
+    mode_gamma_sequential_trip_init,
+    mode_gamma_sequential_fire_init,
+    mode_gamma_sequential_bounce_init,
+    mode_gamma_portals_init,
+    mode_gamma_coin_toss_init,
+    mode_gamma_ratchet_init,
+    mode_gamma_anti_ratchet_init,
+    mode_gamma_start_stop_init
 };
 
 

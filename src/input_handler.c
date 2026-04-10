@@ -4,6 +4,7 @@
 #include "drivers/io.h"
 #include "drivers/ext_clock.h"
 #include "main_constants.h"
+#include "variables.h"
 #include "status_led.h" // For status_led_set_override
 #include "util/delay.h" // For millis
 #include "modes/modes.h"  // For operational_mode_t
@@ -34,6 +35,7 @@ static input_calc_mode_change_callback_t calc_mode_change_cb = NULL;
 static input_fixed_bank_change_callback_t fixed_bank_change_cb = NULL;
 static input_save_request_callback_t save_request_cb = NULL; 
 static input_aux_led_blink_request_callback_t aux_led_blink_request_cb = NULL;
+static input_gamma_aux_pattern_callback_t gamma_aux_pattern_cb = NULL;
 static input_mod_press_callback_t mod_press_cb = NULL;
 
 // External Clock State
@@ -80,9 +82,12 @@ static uint32_t last_calc_swap_trigger_time = 0;
 static volatile bool ext_gate_swap_requested = false;
 static volatile uint32_t last_gate_swap_isr_time = 0;
 
-/** True if user held TAP past OP_MODE_TAP_OMEGA_HOLD_MS before release (MOD clicks → mode index +10). */
+/** True if user held TAP past OP_MODE_TAP_OMEGA_HOLD_MS (MOD clicks → mode index +10). */
 static bool op_mode_select_omega = false;
 static bool op_mode_omega_threshold_announced = false;
+/** True if user held past OP_MODE_TAP_GAMMA_HOLD_MS (MOD clicks → N+20). */
+static bool op_mode_select_gamma = false;
+static bool op_mode_gamma_threshold_announced = false;
 
 static bool calc_swap_cooldown_ok(uint32_t now) {
     return (last_calc_swap_trigger_time == 0u) ||
@@ -107,6 +112,8 @@ static void reset_op_mode_sm_vars(void) {
 
     op_mode_select_omega = false;
     op_mode_omega_threshold_announced = false;
+    op_mode_select_gamma = false;
+    op_mode_gamma_threshold_announced = false;
 
     just_exited_op_mode_sm = true;
 }
@@ -226,6 +233,8 @@ static void handle_op_mode_sm(uint32_t now, bool tap_pressed_now, bool mod_is_pr
                 op_mode_clicks_count = 0; 
                 op_mode_select_omega = false;
                 op_mode_omega_threshold_announced = false;
+                op_mode_select_gamma = false;
+                op_mode_gamma_threshold_announced = false;
                 status_led_set_override(true, true); 
                 if(aux_led_blink_request_cb) { aux_led_blink_request_cb(); }
                 current_op_mode_sm_state = INPUT_SM_TAP_QUALIFIED_WAITING_RELEASE;
@@ -238,9 +247,16 @@ static void handle_op_mode_sm(uint32_t now, bool tap_pressed_now, bool mod_is_pr
                     reset_op_mode_sm_vars();
                     break;
                 }
-                /* Omega = soft blink; future ~3 s tier (e.g. modes 21–30, 2 flashes): krono_aux_led_pattern_start(2, …) from krono_aux_led_pattern.h */
-                if (!op_mode_omega_threshold_announced &&
-                    (now - tap_press_start_time) >= OP_MODE_TAP_OMEGA_HOLD_MS) {
+                if (!op_mode_gamma_threshold_announced &&
+                    (now - tap_press_start_time) >= OP_MODE_TAP_GAMMA_HOLD_MS) {
+                    op_mode_gamma_threshold_announced = true;
+                    op_mode_select_gamma = true;
+                    op_mode_select_omega = false;
+                    if (gamma_aux_pattern_cb) {
+                        gamma_aux_pattern_cb();
+                    }
+                } else if (!op_mode_omega_threshold_announced &&
+                           (now - tap_press_start_time) >= OP_MODE_TAP_OMEGA_HOLD_MS) {
                     op_mode_omega_threshold_announced = true;
                     op_mode_select_omega = true;
                     if (aux_led_blink_request_cb) {
@@ -312,7 +328,13 @@ static void handle_op_mode_sm(uint32_t now, bool tap_pressed_now, bool mod_is_pr
                     if (op_mode_clicks_count > 0) { 
                         if (aux_led_blink_request_cb) { aux_led_blink_request_cb(); }
                         if (op_mode_change_cb) {
-                            if (op_mode_select_omega) {
+                            if (op_mode_select_gamma) {
+                                uint8_t gn = op_mode_clicks_count;
+                                if (gn > 10) {
+                                    gn = (uint8_t)(((gn - 1u) % 10u) + 1u);
+                                }
+                                op_mode_change_cb((uint8_t)(gn + 20u));
+                            } else if (op_mode_select_omega) {
                                 uint8_t n = op_mode_clicks_count;
                                 if (n > 10) {
                                     n = (uint8_t)(((n - 1u) % 10u) + 1u);
@@ -365,6 +387,7 @@ void input_handler_init(
     input_fixed_bank_change_callback_t fixed_bank_cb_param,
     input_save_request_callback_t save_req_cb_param,
     input_aux_led_blink_request_callback_t aux_blink_cb_param,
+    input_gamma_aux_pattern_callback_t gamma_aux_cb_param,
     input_mod_press_callback_t mod_press_cb_param)
 {
     tempo_change_cb = tempo_cb_param;
@@ -373,6 +396,7 @@ void input_handler_init(
     fixed_bank_change_cb = fixed_bank_cb_param;
     save_request_cb = save_req_cb_param;
     aux_led_blink_request_cb = aux_blink_cb_param;
+    gamma_aux_pattern_cb = gamma_aux_cb_param;
     mod_press_cb = mod_press_cb_param;
 
     input_pins_init();
@@ -416,7 +440,7 @@ void input_handler_update(void) {
 
         if (!external_clock_active || validated_interval != last_valid_external_clock_interval) {
             if (tempo_change_cb && validated_interval > 0) {
-                tempo_change_cb(validated_interval, true, event_time);
+                tempo_change_cb(validated_interval, true, event_time, false);
             }
         }
         external_clock_active = true;
@@ -444,7 +468,7 @@ void input_handler_update(void) {
                 }
 
                 input_tempo_set_last_reported_interval(new_internal_tempo_to_set);
-                tempo_change_cb(new_internal_tempo_to_set, false, now);
+                tempo_change_cb(new_internal_tempo_to_set, false, now, false);
             }
             last_valid_external_clock_interval = 0;
         }
@@ -458,22 +482,27 @@ void input_handler_update(void) {
     input_tempo_handle_tap_event();
 
     if (ext_gate_swap_requested) {
-        // CV Gate Swap (PB4) triggers calc_mode_change or fixed-bank change depending on mode
-        // No longer requires PA1 (MOD button) to be pressed simultaneously
+        /* PB4 CV gate: mirror MOD short-press for modes 12–20 and Gamma; else FIXED bank or calc swap. */
         if (calc_swap_cooldown_ok(now)) {
-            bool current_op_mode_is_fixed = (last_known_main_op_mode == MODE_FIXED);
-            if (current_op_mode_is_fixed) {
-                if (fixed_bank_change_cb) {
-                    fixed_bank_change_cb();
+            if (MODE_USES_MOD_GESTURES(last_known_main_op_mode)) {
+                if (mod_press_cb) {
+                    mod_press_cb(MOD_PRESS_EVENT_SINGLE, now);
                 }
             } else {
-                if (calc_mode_change_cb) {
-                    calc_mode_change_cb();
+                bool current_op_mode_is_fixed = (last_known_main_op_mode == MODE_FIXED);
+                if (current_op_mode_is_fixed) {
+                    if (fixed_bank_change_cb) {
+                        fixed_bank_change_cb();
+                    }
+                } else {
+                    if (calc_mode_change_cb) {
+                        calc_mode_change_cb();
+                    }
                 }
             }
-            last_calc_swap_trigger_time = now; // Update cooldown timer for CV swap as well
+            last_calc_swap_trigger_time = now;
         }
-        ext_gate_swap_requested = false; 
+        ext_gate_swap_requested = false;
     }
 }
 

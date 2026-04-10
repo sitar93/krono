@@ -3,14 +3,67 @@
 #include "drivers/tap.h"
 #include "main_constants.h"
 
+#include <stdbool.h>
 #include <stdint.h>
 
 static input_tempo_emit_callback_t tempo_emit_cb = 0;
-static uint32_t tap_intervals[TAP_LOCK_INTERVAL_SAMPLES];
-static uint8_t tap_interval_index = 0;
 static uint32_t last_reported_tap_tempo_interval = 0;
-static bool tap_tempo_locked = false;
-static uint32_t refined_interval_ms = 0;
+
+static uint32_t quad_gaps_ms[TAP_TEMPO_AVG_INTERVALS];
+/** How many gaps stored toward the next boundary (0..3). */
+static uint8_t gaps_stored = 0;
+/** After a boundary pulse, next tap's interval (carry-in) is ignored. */
+static bool await_quad_start = false;
+static uint32_t last_pattern_tap_ms = 0;
+
+/** false: next boundary is leading (tap 4, 12, …); true: next is trailing (8, 16, …). */
+static bool next_boundary_is_trailing = false;
+static uint32_t leading_boundary_median_ms = 0;
+static uint32_t leading_boundary_press_ms = 0;
+static bool leading_boundary_valid = false;
+
+static uint32_t median_of_u32_3(uint32_t a, uint32_t b, uint32_t c) {
+    uint32_t x = a;
+    uint32_t y = b;
+    uint32_t z = c;
+    if (x > y) {
+        uint32_t t = x;
+        x = y;
+        y = t;
+    }
+    if (y > z) {
+        uint32_t t = y;
+        y = z;
+        z = t;
+    }
+    if (x > y) {
+        uint32_t t = x;
+        x = y;
+        y = t;
+    }
+    return y;
+}
+
+static uint32_t clamp_interval(uint32_t ms) {
+    if (ms < MIN_INTERVAL) {
+        return MIN_INTERVAL;
+    }
+    if (ms > MAX_INTERVAL) {
+        return MAX_INTERVAL;
+    }
+    return ms;
+}
+
+static void pattern_reset(void) {
+    gaps_stored = 0;
+    await_quad_start = false;
+    last_pattern_tap_ms = 0;
+    next_boundary_is_trailing = false;
+    leading_boundary_valid = false;
+    for (int i = 0; i < TAP_TEMPO_AVG_INTERVALS; i++) {
+        quad_gaps_ms[i] = 0;
+    }
+}
 
 void input_tempo_init(input_tempo_emit_callback_t emit_cb) {
     tempo_emit_cb = emit_cb;
@@ -18,58 +71,15 @@ void input_tempo_init(input_tempo_emit_callback_t emit_cb) {
 }
 
 void input_tempo_reset_calculation(void) {
-    tap_interval_index = 0;
-    tap_tempo_locked = false;
-    refined_interval_ms = 0;
+    pattern_reset();
     last_reported_tap_tempo_interval = 0;
-    for (int i = 0; i < TAP_LOCK_INTERVAL_SAMPLES; i++) {
-        tap_intervals[i] = 0;
-    }
 }
 
-static void sort_u32_3(uint32_t *a, uint32_t *b, uint32_t *c) {
-    if (*a > *b) {
-        uint32_t t = *a;
-        *a = *b;
-        *b = t;
-    }
-    if (*b > *c) {
-        uint32_t t = *b;
-        *b = *c;
-        *c = t;
-    }
-    if (*a > *b) {
-        uint32_t t = *a;
-        *a = *b;
-        *b = t;
-    }
-}
-
-/** @return true if spread is acceptable; *median_out is middle of sorted triple. */
-static bool lock_triple_coherent(uint32_t i0, uint32_t i1, uint32_t i2, uint32_t *median_out) {
-    uint32_t a = i0, b = i1, c = i2;
-    sort_u32_3(&a, &b, &c);
-    uint32_t spread = c - a;
-    uint32_t med = b;
-    uint32_t allow = (med * TAP_INTERVAL_SPREAD_PERCENT) / 100;
-    if (allow < TAP_INTERVAL_SPREAD_MIN_MS) {
-        allow = TAP_INTERVAL_SPREAD_MIN_MS;
-    }
-    if (spread > allow) {
-        return false;
-    }
-    if (spread > MAX_INTERVAL_DIFFERENCE) {
-        return false;
-    }
-    *median_out = med;
-    return true;
-}
-
-static void emit_tap_tempo(uint32_t interval_ms, uint32_t press_time_ms) {
+static void emit_quadruple_boundary(uint32_t interval_ms, uint32_t press_time_ms) {
     if (!tempo_emit_cb || interval_ms == 0) {
         return;
     }
-    tempo_emit_cb(interval_ms, false, press_time_ms);
+    tempo_emit_cb(interval_ms, false, press_time_ms, true);
     last_reported_tap_tempo_interval = interval_ms;
 }
 
@@ -81,57 +91,63 @@ void input_tempo_handle_tap_event(void) {
     uint32_t press_ms = tap_get_last_press_time_ms();
     uint32_t interval = tap_get_interval();
 
+    if (last_pattern_tap_ms != 0u && (press_ms - last_pattern_tap_ms) > TAP_PATTERN_IDLE_RESET_MS) {
+        pattern_reset();
+        tap_abort_capture();
+    }
+
+    last_pattern_tap_ms = press_ms;
+
+    /* First physical edge of a session: no interval yet (tap.c). */
+    if (interval == 0u) {
+        return;
+    }
+
     if (interval < MIN_INTERVAL || interval > MAX_INTERVAL) {
-        input_tempo_reset_calculation();
+        pattern_reset();
+        tap_abort_capture();
         return;
     }
 
-    if (!tap_tempo_locked) {
-        tap_intervals[tap_interval_index++] = interval;
-        if (tap_interval_index < TAP_LOCK_INTERVAL_SAMPLES) {
-            return;
-        }
-
-        uint32_t med = 0;
-        if (!lock_triple_coherent(tap_intervals[0], tap_intervals[1], tap_intervals[2], &med)) {
-            input_tempo_reset_calculation();
-            return;
-        }
-
-        tap_tempo_locked = true;
-        refined_interval_ms = med;
-        tap_interval_index = 0;
-        emit_tap_tempo(refined_interval_ms, press_ms);
+    if (await_quad_start) {
+        await_quad_start = false;
         return;
     }
 
-    // Locked: refine BPM with EMA; always re-sync phase to this tap (follow the drummer).
-    uint32_t dev = interval > refined_interval_ms ? interval - refined_interval_ms
-                                                  : refined_interval_ms - interval;
-    uint32_t thresh = (refined_interval_ms * TAP_REFINE_OUTLIER_FRAC_NUM) / TAP_REFINE_OUTLIER_FRAC_DEN;
-    if (thresh < 1) {
-        thresh = 1;
+    if (gaps_stored < TAP_TEMPO_AVG_INTERVALS) {
+        quad_gaps_ms[gaps_stored++] = interval;
     }
 
-    if (dev > thresh) {
-        emit_tap_tempo(refined_interval_ms, press_ms);
+    if (gaps_stored < TAP_TEMPO_AVG_INTERVALS) {
         return;
     }
 
-    {
-        int32_t delta = (int32_t)interval - (int32_t)refined_interval_ms;
-        int32_t adj = delta / (int32_t)TAP_REFINE_EMA_DIVISOR;
-        int32_t next = (int32_t)refined_interval_ms + adj;
-        if (next < (int32_t)MIN_INTERVAL) {
-            next = (int32_t)MIN_INTERVAL;
+    uint32_t med = median_of_u32_3(quad_gaps_ms[0], quad_gaps_ms[1], quad_gaps_ms[2]);
+    med = clamp_interval(med);
+
+    if (!next_boundary_is_trailing) {
+        emit_quadruple_boundary(med, press_ms);
+        leading_boundary_median_ms = med;
+        leading_boundary_press_ms = press_ms;
+        leading_boundary_valid = true;
+        next_boundary_is_trailing = true;
+    } else {
+        uint32_t out = med;
+        if (leading_boundary_valid &&
+            (press_ms - leading_boundary_press_ms) <= TAP_QUAD_BLEND_WINDOW_MS) {
+            uint32_t a = leading_boundary_median_ms;
+            uint32_t b = med;
+            out = (TAP_QUAD_BLEND_LEADING_NUM * a + TAP_QUAD_BLEND_TRAILING_NUM * b + TAP_QUAD_BLEND_DENOM / 2u) /
+                  TAP_QUAD_BLEND_DENOM;
+            out = clamp_interval(out);
         }
-        if (next > (int32_t)MAX_INTERVAL) {
-            next = (int32_t)MAX_INTERVAL;
-        }
-        refined_interval_ms = (uint32_t)next;
+        emit_quadruple_boundary(out, press_ms);
+        leading_boundary_valid = false;
+        next_boundary_is_trailing = false;
     }
 
-    emit_tap_tempo(refined_interval_ms, press_ms);
+    gaps_stored = 0;
+    await_quad_start = true;
 }
 
 uint32_t input_tempo_get_last_reported_interval(void) {

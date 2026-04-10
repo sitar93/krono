@@ -60,6 +60,13 @@ void mode_state_apply_runtime(operational_mode_t op_mode, const krono_state_t *s
     mode_accumulate_set_state(state->accumulate_active_count, state->accumulate_add_pending,
                               state->accumulate_active_mask, state->accumulate_phase_offsets,
                               state->accumulate_variation_masks);
+    mode_gamma_sequential_freeze_set_state(state->gamma_seq_freeze_frozen, state->gamma_seq_freeze_step);
+    mode_gamma_sequential_trip_set_state(state->gamma_seq_trip_pattern, state->gamma_seq_trip_step);
+    mode_gamma_portals_set_state(state->gamma_portals_div_on_a);
+    mode_gamma_coin_toss_set_state(state->gamma_coin_invert);
+    mode_gamma_ratchet_set_state(state->gamma_ratchet_double);
+    mode_gamma_anti_ratchet_set_state(state->gamma_antiratchet_half);
+    mode_gamma_start_stop_set_state(state->gamma_startstop_muted);
 }
 
 void mode_state_capture_for_save(operational_mode_t op_mode,
@@ -97,4 +104,34 @@ void mode_state_capture_for_save(operational_mode_t op_mode,
     mode_accumulate_get_state(&state_to_save->accumulate_active_count, &state_to_save->accumulate_add_pending,
                               &state_to_save->accumulate_active_mask, state_to_save->accumulate_phase_offsets,
                               state_to_save->accumulate_variation_masks);
+    mode_gamma_sequential_freeze_get_state(&state_to_save->gamma_seq_freeze_frozen,
+                                           &state_to_save->gamma_seq_freeze_step);
+    mode_gamma_sequential_trip_get_state(&state_to_save->gamma_seq_trip_pattern,
+                                          &state_to_save->gamma_seq_trip_step);
+
+    if (op_mode == MODE_GAMMA_PORTALS) {
+        mode_gamma_portals_get_state(&state_to_save->gamma_portals_div_on_a);
+    } else {
+        state_to_save->gamma_portals_div_on_a = current_state->gamma_portals_div_on_a;
+    }
+    if (op_mode == MODE_GAMMA_COIN_TOSS) {
+        mode_gamma_coin_toss_get_state(&state_to_save->gamma_coin_invert);
+    } else {
+        state_to_save->gamma_coin_invert = current_state->gamma_coin_invert;
+    }
+    if (op_mode == MODE_GAMMA_RATCHET) {
+        mode_gamma_ratchet_get_state(&state_to_save->gamma_ratchet_double);
+    } else {
+        state_to_save->gamma_ratchet_double = current_state->gamma_ratchet_double;
+    }
+    if (op_mode == MODE_GAMMA_ANTI_RATCHET) {
+        mode_gamma_anti_ratchet_get_state(&state_to_save->gamma_antiratchet_half);
+    } else {
+        state_to_save->gamma_antiratchet_half = current_state->gamma_antiratchet_half;
+    }
+    if (op_mode == MODE_GAMMA_START_STOP) {
+        mode_gamma_start_stop_get_state(&state_to_save->gamma_startstop_muted);
+    } else {
+        state_to_save->gamma_startstop_muted = current_state->gamma_startstop_muted;
+    }
 }

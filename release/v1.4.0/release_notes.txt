@@ -1,0 +1,32 @@
+# KRONO v1.4.0
+
+This release adds **ten new operational modes (21–30)** on top of the existing map. Think of them as scenes built around the same **base tempo** you already set with tap or external clock: each **beat** of that grid is what everything else lines up to—not a separate “tech” layer, just the pulse you feel.
+
+**How to select them:** use the familiar long hold on **Tap** to enter the mode-change flow. After the **Omega** point (~2 s), keep holding until the aux LED gives a **double** short blink—that means you are choosing among **modes 21–30** instead of 1–10 or 11–20. Then use **Mode** clicks and **Tap** to confirm, as usual.
+
+**Tap tempo:** still settles on **every fourth** tap (4, 8, 12, …). Each of those moments sets the period from the **middle** of the last three gaps and lines up **one** strong pulse with that tap. The softer blend on 8, 16, … and the five-second idle reset work as described in the main user guide. **Very slow** tempos are easier to hold: the firmware allows a longer slow limit, a lower minimum BPM on readouts that use it, and a more patient timeout when you rely on external clock.
+
+**What gets saved:** modes that remember a setting (freeze, which trip script, portals in multiply vs divide, coin odds flipped, ratchet / anti-ratchet / STARTnSTOP mute) are written when you save after a mode-change hold, like the rest of Krono. Because more data lives in flash, **the first boot after this update may drop an old save** if the stored block no longer matches—plan one quick revisit of tempo and mode if needed.
+
+---
+
+## New operational modes
+
+Hardware labels **1A…6A** and **1B…6B** are the panel outputs; **MOD** is the short gesture for these modes (same idea as 12–20) unless the UI is busy.
+
+| # | Mode | Summary |
+|---|------|---------|
+| 21 | **SEQUENTIAL RESET** | **One output active per beat**, walking **1A through 6A**, then **1B through 6B** (twelve steps per full round). **MOD:** snap back to the start of that cycle. **Swap:** run the twelve steps **backward**. The first A/B outputs are part of this pattern—not a separate copy of the base pulse. |
+| 22 | **SEQUENTIAL FREEZE** | Same walk as 21. **MOD:** **freeze** on the current step (the light stays put) or **unfreeze** to move again. **Persisted.** |
+| 23 | **SEQUENTIAL TRIP** | **Six** different scripted walks across the jacks. **MOD:** next script, back to step one. **Swap:** play the current script **backward**. **Persisted.** |
+| 24 | **SEQUENTIAL FIRE** | **MOD:** a **1A + 6B** hit together, then on **each following beat** a **single pair** steps **up** on A and **down** on B (**2A+5B**, then **3A+4B**, … through **6A+1B**). Gates use the **normal** trigger length. |
+| 25 | **SEQUENTIAL BOUNCE** | **MOD:** all **twelve** outs fire **once** in unison, then each **row** runs its own **mini burst**: A side **speeds up** (gaps shrink row by row; the top A row finishes first), B side **slows down** in parallel (the bottom B row finishes last). Timing is in **real seconds**, not tied to your current BPM—good for a fixed “whoosh” after the unison hit. |
+| 26 | **PORTALS** | **Sustained levels**, not little blips: for each column, one side sits **high** and the other **low** for the whole beat—they act like **doors**. **Divide** (default): row **1** swaps every beat, row **2** every **two** beats, row **3** every **three**, and so on. **MOD:** switch to **multiply**, so higher rows **flip faster within the beat** (tighter alternation for larger row numbers). **Persisted** (multiply vs divide). |
+| 27 | **COIN TOSS** | On **each beat**, for every A/B pair, the module **picks** A or B with fixed odds (stronger bias on the **1** row, fairer in the middle, rare on the **6** row). **MOD:** flip to the **mirrored** odds. **Persisted.** |
+| 28 | **RATCHET** | Classic **A = multiples**, **B = divisions** on **1A–6A** and **1B–6B**, including the first outputs. **MOD:** **double** the effective “fast” side **without** restarting the bar—subdivisions **stretch** to match, the underlying beat grid **does not** jump. **Persisted.** |
+| 29 | **ANTI-RATCHET** | Same routing as 28. **MOD:** **halve** that effective speed the same way—**no** extra pause, **no** forced reset of the divided side. **Persisted.** |
+| 30 | **STARTnSTOP** | Same routing as 28. **MOD:** **mute** all outgoing gates; the **internal** timing **keeps running**, so when you unmute you land back in phase. **Persisted.** |
+
+---
+
+**Maintainers:** build with PlatformIO for the Black Pill target; copy the renamed **.bin / .hex / .elf** from the build folder into this release directory. **DFU:** hold **BOOT0**, pulse **reset**, release **BOOT0**, then upload with your usual tool or the project upload script from the repo root.

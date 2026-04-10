@@ -4,7 +4,12 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-typedef void (*input_tempo_emit_callback_t)(uint32_t new_interval_ms, bool is_external, uint32_t event_time_ms);
+/**
+ * @param tap_quadruple_boundary true on clicks 4, 8, 12, …: F1 pulse at event_time_ms and tempo = mean of the
+ *        three gaps in that quadruple; false is unused by tap tempo (kept for callback shape vs external path).
+ */
+typedef void (*input_tempo_emit_callback_t)(uint32_t new_interval_ms, bool is_external, uint32_t event_time_ms,
+                                            bool tap_quadruple_boundary);
 
 void input_tempo_init(input_tempo_emit_callback_t emit_cb);
 void input_tempo_reset_calculation(void);

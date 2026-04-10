@@ -12,16 +12,15 @@ extern "C" {
 void tap_init(void);
 
 /**
- * @brief Checks if a new tap interval has been detected since the last call.
+ * @brief Checks if a new tap edge has been detected since the last call.
  * Clears the internal flag upon being called.
- * @return true if a new interval is ready, false otherwise.
+ * @return true on the first edge after reset (interval 0) or on each subsequent debounced edge.
  */
 bool tap_detected(void);
 
 /**
- * @brief Gets the last measured interval between taps in milliseconds.
- * Call only after tap_detected() returns true.
- * @return uint32_t The interval in milliseconds.
+ * @brief Interval since the previous accepted edge in milliseconds.
+ * After the first edge in a sequence this is 0; from the second edge onward it is the gap used for tap tempo.
  */
 uint32_t tap_get_interval(void);
 

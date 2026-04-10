@@ -63,12 +63,14 @@ uint32_t millis(void) {
 static void save_current_state(void);
 
 // Input Handler Callbacks
-static void on_tap_tempo_change(uint32_t new_interval_ms, bool is_external_clock, uint32_t event_timestamp_ms);
+static void on_tap_tempo_change(uint32_t new_interval_ms, bool is_external_clock, uint32_t event_timestamp_ms,
+                               bool tap_quadruple_boundary);
 static void on_op_mode_change(uint8_t mode_clicks);
 static void on_calc_mode_change(void);
 static void on_fixed_bank_change(void);
 static void on_save_request_from_input_handler(void); 
 static void on_aux_led_blink_request_from_input_handler(void);
+static void on_gamma_arm_aux_pattern_from_input_handler(void);
 static void on_mod_press(mod_press_event_t event, uint32_t timestamp_ms);
 
 // Forward Declarations
@@ -77,9 +79,14 @@ static void configure_unused_pins(void);
 
 
 // --- Input Handler Callback Implementations ---
-static void on_tap_tempo_change(uint32_t new_interval_ms, bool is_external_clock, uint32_t event_timestamp_ms) {
+static void on_tap_tempo_change(uint32_t new_interval_ms, bool is_external_clock, uint32_t event_timestamp_ms,
+                                bool tap_quadruple_boundary) {
     if (new_interval_ms > 0) {
-        clock_manager_set_internal_tempo(new_interval_ms, is_external_clock, event_timestamp_ms);
+        if (tap_quadruple_boundary) {
+            clock_manager_arm_tap_quadruple_boundary(new_interval_ms, event_timestamp_ms);
+        } else {
+            clock_manager_set_internal_tempo(new_interval_ms, is_external_clock, event_timestamp_ms);
+        }
         pa3_soft_blink_arm();
     }
 }
@@ -149,6 +156,10 @@ static void on_save_request_from_input_handler(void) {
 
 static void on_aux_led_blink_request_from_input_handler(void) {
     pa3_soft_blink_arm();
+}
+
+static void on_gamma_arm_aux_pattern_from_input_handler(void) {
+    krono_aux_led_pattern_start(2, AUX_LED_MULTI_PULSE_ON_MS, AUX_LED_MULTI_PULSE_GAP_MS);
 }
 
 static void on_mod_press(mod_press_event_t event, uint32_t timestamp_ms) {
@@ -238,6 +249,7 @@ static void system_init(void) {
         on_fixed_bank_change,
         on_save_request_from_input_handler,
         on_aux_led_blink_request_from_input_handler,
+        on_gamma_arm_aux_pattern_from_input_handler,
         on_mod_press);
     input_handler_update_main_op_mode(g_current_op_mode); 
 

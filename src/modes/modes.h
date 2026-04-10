@@ -32,6 +32,16 @@ typedef enum {
     MODE_DENSITY,
     MODE_SONG,
     MODE_ACCUMULATE,        // 20
+    MODE_GAMMA_SEQUENTIAL_RESET, // 21 (Gamma): 1A…6A then 1B…6B; MOD/CV = phase reset
+    MODE_GAMMA_SEQUENTIAL_FREEZE, // 22: same 12-step sweep; MOD/CV toggles freeze (hold step)
+    MODE_GAMMA_SEQUENTIAL_TRIP, // 23: six trip patterns; MOD/CV cycles pattern
+    MODE_GAMMA_SEQUENTIAL_FIRE, // 24: MOD 1A+6B; each F1 paired 2A+5B … 6A+1B
+    MODE_GAMMA_SEQUENTIAL_BOUNCE, // 25: MOD one-shot decel A / accel B scene
+    MODE_GAMMA_PORTALS, // 26: A/B held “doors”; divide vs multiply swap cadence
+    MODE_GAMMA_COIN_TOSS, // 27: F1 coin flip per pair; MOD inverts probabilities
+    MODE_GAMMA_RATCHET, // 28: 1A–6A mult, 1B–6B div; MOD ×2 toggle
+    MODE_GAMMA_ANTI_RATCHET, // 29: same routing; MOD ÷2 (half-speed) toggle
+    MODE_GAMMA_START_STOP, // 30: same routing; MOD toggles output mute latch
     NUM_OPERATIONAL_MODES // Keep this last for counting
 } operational_mode_t;
 
@@ -211,9 +221,77 @@ void mode_accumulate_set_state(uint8_t active_count, bool add_pending, uint16_t 
 void mode_accumulate_get_state(uint8_t *active_count, bool *add_pending, uint16_t *active_mask,
                                uint8_t *phase_offsets, uint16_t *variation_masks);
 
-/** True for modes 12–20: MOD short-press handled by mode_*_on_mod_press (not calc/fixed swap). */
+void mode_gamma_sequential_reset_init(void);
+void mode_gamma_sequential_reset_update(const mode_context_t *context);
+void mode_gamma_sequential_reset_reset(void);
+void mode_gamma_sequential_reset_on_mod_press(mod_press_event_t ev, uint32_t ts_ms);
+
+void mode_gamma_sequential_freeze_init(void);
+void mode_gamma_sequential_freeze_update(const mode_context_t *context);
+void mode_gamma_sequential_freeze_reset(void);
+void mode_gamma_sequential_freeze_on_mod_press(mod_press_event_t ev, uint32_t ts_ms);
+void mode_gamma_sequential_freeze_set_state(bool frozen, uint8_t step);
+void mode_gamma_sequential_freeze_get_state(bool *frozen, uint8_t *step);
+
+void mode_gamma_sequential_trip_init(void);
+void mode_gamma_sequential_trip_update(const mode_context_t *context);
+void mode_gamma_sequential_trip_reset(void);
+void mode_gamma_sequential_trip_on_mod_press(mod_press_event_t ev, uint32_t ts_ms);
+void mode_gamma_sequential_trip_set_state(uint8_t pattern_id, uint8_t step_idx);
+void mode_gamma_sequential_trip_get_state(uint8_t *pattern_id, uint8_t *step_idx);
+
+void mode_gamma_sequential_fire_init(void);
+void mode_gamma_sequential_fire_update(const mode_context_t *context);
+void mode_gamma_sequential_fire_reset(void);
+void mode_gamma_sequential_fire_on_mod_press(mod_press_event_t ev, uint32_t ts_ms);
+
+void mode_gamma_sequential_bounce_init(void);
+void mode_gamma_sequential_bounce_update(const mode_context_t *context);
+void mode_gamma_sequential_bounce_reset(void);
+void mode_gamma_sequential_bounce_on_mod_press(mod_press_event_t ev, uint32_t ts_ms);
+
+void mode_gamma_portals_init(void);
+void mode_gamma_portals_update(const mode_context_t *context);
+void mode_gamma_portals_reset(void);
+void mode_gamma_portals_on_mod_press(mod_press_event_t ev, uint32_t ts_ms);
+void mode_gamma_portals_set_state(bool multiply_mode);
+void mode_gamma_portals_get_state(bool *multiply_mode);
+
+void mode_gamma_coin_toss_init(void);
+void mode_gamma_coin_toss_update(const mode_context_t *context);
+void mode_gamma_coin_toss_reset(void);
+void mode_gamma_coin_toss_on_mod_press(mod_press_event_t ev, uint32_t ts_ms);
+void mode_gamma_coin_toss_set_state(bool invert_probabilities);
+void mode_gamma_coin_toss_get_state(bool *invert_probabilities);
+
+void mode_gamma_ratchet_init(void);
+void mode_gamma_ratchet_update(const mode_context_t *context);
+void mode_gamma_ratchet_reset(void);
+void mode_gamma_ratchet_on_mod_press(mod_press_event_t ev, uint32_t ts_ms);
+void mode_gamma_ratchet_set_state(bool double_speed);
+void mode_gamma_ratchet_get_state(bool *double_speed);
+
+void mode_gamma_anti_ratchet_init(void);
+void mode_gamma_anti_ratchet_update(const mode_context_t *context);
+void mode_gamma_anti_ratchet_reset(void);
+void mode_gamma_anti_ratchet_on_mod_press(mod_press_event_t ev, uint32_t ts_ms);
+void mode_gamma_anti_ratchet_set_state(bool half_speed);
+void mode_gamma_anti_ratchet_get_state(bool *half_speed);
+
+void mode_gamma_start_stop_init(void);
+void mode_gamma_start_stop_update(const mode_context_t *context);
+void mode_gamma_start_stop_reset(void);
+void mode_gamma_start_stop_on_mod_press(mod_press_event_t ev, uint32_t ts_ms);
+void mode_gamma_start_stop_set_state(bool muted);
+void mode_gamma_start_stop_get_state(bool *muted);
+
+/** True for modes 12–20 and Gamma family: MOD short-press → mode_*_on_mod_press (not calc/fixed swap). */
 #define MODE_USES_MOD_GESTURES(m) \
-    ((int)(m) >= (int)MODE_DRIFT && (int)(m) <= (int)MODE_ACCUMULATE)
+    (((int)(m) >= (int)MODE_DRIFT && (int)(m) <= (int)MODE_ACCUMULATE) || \
+     ((int)(m) >= (int)MODE_GAMMA_SEQUENTIAL_RESET && (int)(m) < (int)NUM_OPERATIONAL_MODES))
+
+/** Gamma: internal F1 timing stays; 1A/1B are not driven as the automatic base-clock mirror. */
+#define MODE_SKIPS_AUTO_F1_CLOCK_ON_1AB(m) ((int)(m) >= (int)MODE_GAMMA_SEQUENTIAL_RESET)
 
 void mode_dispatch_mod_press(operational_mode_t op, mod_press_event_t ev, uint32_t ts_ms);
 
