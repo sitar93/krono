@@ -9,7 +9,7 @@ This file is the **single technical reference** for anyone modifying the codebas
 | Topic | Where |
 |--------|--------|
 | Usage, hardware, modes (user) | `README.md` |
-| Gamma tier (modes 21–30): behavior table (user) + firmware notes (this file) | `README.md` + **Gamma** section below |
+| OMEGA tier (modes 21–30): behavior table (user) + firmware notes (this file) | `README.md` + **OMEGA / internal Gamma** section below |
 | What changed per release | `CHANGELOG.txt` |
 | License | `LICENSE.txt` |
 | Build, style, architecture, debug | This file (`AGENTS.md`) |
@@ -91,33 +91,33 @@ platformio.ini
 
 **External clock:** `ext_clock.c` validated intervals override tap; timeout falls back to internal tempo.
 
-### Omega — selecting operational modes 11–20 (v1.3.2+)
+### BETA / OMEGA selection (mode families)
 
-Omega reuses the **same** op-mode change state machine as modes 1–10 (`handle_op_mode_sm` in `input_handler.c`). There is **no** long-press on Mode to enter a separate UI.
+Mode-family selection reuses the **same** op-mode change state machine as modes 1–10 (`handle_op_mode_sm` in `input_handler.c`). There is **no** long-press on Mode to enter a separate UI.
 
 | Path | Condition | Confirm callback |
 |------|-----------|------------------|
-| Base | User qualifies with Tap hold ≥ `OP_MODE_TAP_HOLD_DURATION_MS`, releases Tap **before** `OP_MODE_TAP_OMEGA_HOLD_MS` from **first** press | `op_mode_change_cb(N)` with N = 1…10 |
-| Omega | User **keeps holding** Tap until `OP_MODE_TAP_OMEGA_HOLD_MS` (~2 s from first press; see `variables.h`) | `op_mode_change_cb(N + 10)`; N wrapped to 1…10 if click count exceeds 10 |
-| Gamma | User **keeps holding** Tap until `OP_MODE_TAP_GAMMA_HOLD_MS` (~3 s from first press) | `op_mode_change_cb(N + 20)`; N wrapped to 1…10; supersedes Omega for confirm if both thresholds crossed |
+| ALPHA (1–10) | User qualifies with Tap hold ≥ `OP_MODE_TAP_HOLD_DURATION_MS`, releases Tap **before** `OP_MODE_TAP_OMEGA_HOLD_MS` from **first** press | `op_mode_change_cb(N)` with N = 1…10 |
+| BETA (11–20) | User **keeps holding** Tap until `OP_MODE_TAP_OMEGA_HOLD_MS` (~2 s from first press; see `variables.h`) | `op_mode_change_cb(N + 10)`; N wrapped to 1…10 if click count exceeds 10 |
+| OMEGA (21–30, internal Gamma) | User **keeps holding** Tap until `OP_MODE_TAP_GAMMA_HOLD_MS` (~3 s from first press) | `op_mode_change_cb(N + 20)`; N wrapped to 1…10; supersedes BETA for confirm if both thresholds crossed |
 
-**Timings** (`variables.h`): `OP_MODE_TAP_HOLD_DURATION_MS`, `OP_MODE_TAP_OMEGA_HOLD_MS`, `OP_MODE_TAP_GAMMA_HOLD_MS`, `OP_MODE_TAP_OMEGA_MAX_HOLD_MS` (abort if Tap never released within this window from press start). **Gamma Aux** uses `AUX_LED_MULTI_PULSE_ON_MS` / `AUX_LED_MULTI_PULSE_GAP_MS` via `krono_aux_led_pattern_start(2, …)` in `main.c` (Omega remains single soft blink).
+**Timings** (`variables.h`): `OP_MODE_TAP_HOLD_DURATION_MS`, `OP_MODE_TAP_OMEGA_HOLD_MS`, `OP_MODE_TAP_GAMMA_HOLD_MS`, `OP_MODE_TAP_OMEGA_MAX_HOLD_MS` (abort if Tap never released within this window from press start). **OMEGA Aux (internal Gamma threshold)** uses `AUX_LED_MULTI_PULSE_ON_MS` / `AUX_LED_MULTI_PULSE_GAP_MS` via `krono_aux_led_pattern_start(2, …)` in `main.c` (BETA remains single soft blink).
 
 **PA3 feedback**
 
-- At **1 s** qualify and at **Omega arm**: `aux_led_blink_request_cb()` → `main.c` `pa3_soft_blink_arm()` (PA3 on + `status_led_pa3_blink_end_time`, typically +100 ms). `pa3_soft_blink_arm()` calls `krono_aux_led_pattern_cancel()` so a queued multi-pulse pattern does not fight a new soft blink.
-- At **Gamma arm** (~3 s): `gamma_aux_pattern_cb` → `krono_aux_led_pattern_start(2, …)`; pump + `krono_aux_led_pattern_active()` as below.
+- At **1 s** qualify and at **BETA arm**: `aux_led_blink_request_cb()` → `main.c` `pa3_soft_blink_arm()` (PA3 on + `status_led_pa3_blink_end_time`, typically +100 ms). `pa3_soft_blink_arm()` calls `krono_aux_led_pattern_cancel()` so a queued multi-pulse pattern does not fight a new soft blink.
+- At **OMEGA arm** (~3 s, internal Gamma threshold): `gamma_aux_pattern_cb` → `krono_aux_led_pattern_start(2, …)`; pump + `krono_aux_led_pattern_active()` as below.
 - **Multi-pulse** pattern: `krono_aux_led_pattern_pump(now)` in the main loop; `krono_aux_led_pattern_active()` — while true, skip the generic PA3-off timeout. `krono_aux_led_cancel_soft_timer()` (in `main.c`) clears the soft deadline when a pattern starts.
 
 **`main.c` coordination**
 
 - Single-file hook `krono_aux_led_cancel_soft_timer()` — clears `status_led_pa3_blink_end_time`; used by `krono_aux_led_pattern.c` when starting a pattern.
 
-**Interaction with modes 12–20 short MOD**
+**Interaction with BETA modes (11–20) short MOD**
 
-`handle_button_calc_mode_swap()` runs only when `current_op_mode_sm_state == INPUT_SM_IDLE` (and other gates). During op-mode change (including Omega), short MOD is consumed by the op-mode SM, not the rhythm-mode gesture path — unchanged from pre-Omega behavior.
+`handle_button_calc_mode_swap()` runs only when `current_op_mode_sm_state == INPUT_SM_IDLE` (and other gates). During op-mode change (including BETA/OMEGA selection), short MOD is consumed by the op-mode SM, not the rhythm-mode gesture path.
 
-### Modes 12–20 and Gamma (short MOD path)
+### Modes 12–20 and OMEGA / internal Gamma (short MOD path)
 
 - **`MODE_USES_MOD_GESTURES(m)`** in `modes.h` — true for `MODE_DRIFT` … `MODE_ACCUMULATE` and Gamma modes (`MODE_GAMMA_SEQUENTIAL_RESET` … as added).
 - **`handle_button_calc_mode_swap()`** in `input_handler.c`: short MOD release (within `CALC_SWAP_MAX_PRESS_DURATION_MS`) → `mod_press_cb(MOD_PRESS_EVENT_SINGLE)`.
