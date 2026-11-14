@@ -57,7 +57,7 @@ KRONO is a 4HP programmable multi-mode clock and rhythm generator with tap tempo
 
 - State is saved in Flash (tempo, mode, swap, and mode-specific parameters).
 - Save path: hold `TAP` to enter mode selection, then wait 5s without changes.
-- External clock has priority when stable; on timeout, firmware falls back to internal timing.
+- External clock has priority when a stable master is present (hard sync per edge); if the master drops or goes out of range, Krono keeps the last tempo immediately (flywheel). Autopatch of 1A/1B into Clock In keeps running on internal timing.
 - In OMEGA modes (21-30), outputs `1A/1B` may be mode-driven (not always plain base clock mirror).
 
 ## Quick start

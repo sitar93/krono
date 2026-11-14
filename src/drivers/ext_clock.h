@@ -19,6 +19,7 @@ void ext_clock_handle_irq(void);
 /**
  * @brief Checks if a new validated external clock interval is ready since the last check.
  *        A validated interval is one derived from a sequence of stable input pulses.
+ *        Notifies on every completed stable sequence (including same BPM as before).
  *        This function also clears the ready flag if it was set.
  *
  * @return true If a new validated interval is ready, false otherwise.
@@ -27,31 +28,59 @@ bool ext_clock_has_new_validated_interval(void);
 
 /**
  * @brief Gets the last validated stable interval measured between rising edges.
- *        This interval is only updated when a sequence of stable intervals is detected.
  *
- * @return uint32_t The last validated interval in ms, or 0 if no stable interval has been
- *                  validated yet or if the clock has timed out.
+ * @return uint32_t The last validated interval in ms, or 0 if none has been validated yet.
  */
 uint32_t ext_clock_get_validated_interval(void);
 
 /**
- * @brief Gets the timestamp (in ms) of the rising edge of the external clock pulse
- *        that completed the most recent interval validation.
+ * @brief Gets the timestamp (in ms) of the rising edge that completed the most recent
+ *        stable validation sequence.
  *
- * @return uint32_t The timestamp of the validating event, or 0 if no interval
- *                  has been validated yet or if the clock has timed out.
+ * @return uint32_t Validating-edge timestamp; meaningful only after a validation.
  */
 uint32_t ext_clock_get_last_validated_event_time(void);
 
 /**
- * @brief Checks if the external clock signal has stopped (timed out).
- *        Timeout detection is based on the time since the last valid (debounced)
- *        ISR execution.
- *
- * @param current_time_ms The current system time (e.g., from millis()).
- * @return true If the time since the last known clock activity exceeds
- *              EXT_CLOCK_TIMEOUT_MS (defined in main_constants.h), false otherwise.
+ * @brief True if hard-follow lock should end: out-of-range break, or no in-range edge
+ *        within (locked_interval_ms + EXT_CLOCK_LOCK_GRACE_MS). Wrap-safe.
  */
-bool ext_clock_has_timed_out(uint32_t current_time_ms);
+bool ext_clock_has_lost_lock(uint32_t current_time_ms, uint32_t locked_interval_ms);
+
+/**
+ * @brief Mark a locally generated F1 (1A/1B) so near-term PB3 edges skip F1 forwarding only.
+ */
+void ext_clock_note_local_f1_pulse(uint32_t pulse_time_ms);
+
+/**
+ * @brief Consumes one pending external clock rising edge queued for F1 forwarding.
+ *
+ * @param pulse_time_ms Out: millis() timestamp of the debounced rising edge.
+ * @return true if a pulse was consumed, false if the queue is empty.
+ */
+bool ext_clock_consume_pulse(uint32_t *pulse_time_ms);
+
+/**
+ * @brief Drop all queued F1-forwarding pulses (IRQ-safe).
+ */
+void ext_clock_flush_pulse_queue(void);
+
+/**
+ * @brief Enable/disable queuing of accepted in-range edges for F1 forwarding.
+ *        Disabling also flushes the queue. IRQ-safe.
+ */
+void ext_clock_set_pulse_forwarding(bool enable);
+
+/**
+ * @brief Atomically flush the F1 queue and enable pulse forwarding (IRQ masked once).
+ *        Call at slave entry after the validating edge has been applied separately.
+ */
+void ext_clock_arm_slave_forwarding(void);
+
+/**
+ * @brief Atomically disable forwarding and flush the F1 queue (IRQ masked once).
+ *        Call at slave exit.
+ */
+void ext_clock_disarm_slave_forwarding(void);
 
 #endif // EXT_CLOCK_H

@@ -9,3 +9,39 @@ v1.3.1 - added modes 12-20; renamed mode 11 to FIXED; full persistence added for
 v1.3.2 - Omega (modes 11-20): TAP hold past OP_MODE_TAP_OMEGA_HOLD_MS (~2s from first press) after 1s qualify; PA3 single soft blink (same path as qualify via aux_led callback); MOD count maps to N+10 on confirm. krono_aux_led_pattern.c/h: optional multi-pulse PA3 sequences (AUX_LED_MULTI_PULSE_ON_MS / AUX_LED_MULTI_PULSE_GAP_MS) for future UI tiers; main.c pumps pattern and uses pa3_soft_blink_arm. Status LED (PA15): modes 1-9 = N short pulses; 10 = L; 11-19 = L plus (mode-10) x N; 20 = L,L; gaps STATUS_LED_INTER_PULSE_OFF_MS / STATUS_LED_AFTER_LONG_OFF_MS / STATUS_LED_SEQUENCE_GAP_MS; set_led drives GPIO high for logical ON (fixes lit-during-pause on some boards). Timings tunable in variables.h.
 
 v1.4.0 - Gamma tier (modes 21–30): hold Tap until OP_MODE_TAP_GAMMA_HOLD_MS (~3s) arms Gamma (double Aux pulse); Tap confirm selects N+20 (wrap 1…10). 21: one jack per F1, sweep 1A…6A then 1B…6B; MOD/PB4 restarts beat phase; swap reverses cycle; no auto 1A/1B F1 mirror. 22: same + MOD freeze (persisted). 23: six trip patterns; MOD cycles; swap reverses (persisted). 24: MOD 1A+6B then each F1 paired 2A+5B … 6A+1B. 25: MOD sync on all 12; A accelerates / B decelerates with fixed-second gaps. 26: held iA/iB doors; divide = swap every k F1 per pair k; MOD multiply = swap every T/k (persisted). 27: F1 coin per pair; MOD invert (persisted). 28–30: mult A / div B on jack 1; 28/29 MOD scales mult deadlines only; 30 MOD mute (persisted). Status LED tens/units to 30. Tap tempo: boundaries 4,8,12… median of three gaps + boundary F1 pulse; 8,16… blend; idle reset; external clock unchanged. Tempo interval change does not reset f1 tick; MAX_INTERVAL 12s, min BPM 20, ext clock timeout extended. PB4 mirrors MOD for modes 12–30. krono_state_t extended for Gamma (older flash may reset once).
+
+v1.4.1.1 - External clock robustness: slave only after a stable validated triplet (not raw PB3 presence); internal F1 continues during lock; notify every completed validation including same BPM; abs+rel stability (3 ms / 5%); F1 pulse forwarding disabled until slave with atomic flush+arm (no backlog burst); one F1 on validating edge via clock_manager_begin_external_slave; timeout on in-range activity with wrap-safe compare; unslave restores session validated tempo else pre-slave tempo else default; tap pattern reset no longer clears last_reported (seeded from flash after init).
+
+v1.4.1.2 - Safety after field brick reports: do not reclaim PA13/PA14 (SWD) as GPIO; PB3 floating (NONE); defer mode update after external validating F1 into clock_manager_update; mask IRQs during persistence sector erase/program.
+
+v1.4.1.3 - External clock high-rate fix: retrigger output pulses instead of dropping when still active (Group B / fast mult freeze); process queued ext edges with per-edge timestamps; always run one wall-clock mode update while slaved so time-based mult is not starved between F1 bursts.
+
+v1.4.1.4 - Fix status LED (PA15): after keeping PA13/PA14 for SWD, explicitly release JTAG-only pins (PA15/PB3/PB4) to GPIO via io_release_jtag_only_pins() so the mode LED is not stuck as JTDI; re-assert after ext-clock/gate init.
+
+v1.4.1.5 - Avoid post-DFU freeze from v1.4.1.4: release JTAG-only pins once in io_init only; do not reconfigure PB3/PB4 after EXTI is armed (status LED still claimed early with PA15).
+
+v1.4.1.6 - Clock In hybrid: hard-follow validated external master (F1 snaps to each edge) while internal flywheel always stays armed; drop follow after one missed beat (period+grace) or out-of-range edge — no multi-second mute. Ignore PB3 echoes of own F1 so 1A/1B autopatch keeps running. Tap ignored only while hard-following; resumes on flywheel.
+
+v1.4.1.7 - Packaging: release `krono_code_*.bin` is RAW (objcopy from ELF, no 16-byte DFU suffix). PlatformIO’s dfu-suffixed image is kept only as `*_dfu.bin` for dfu-util. Browser/WebUSB programmers must use the RAW bin — shipping the suffixed file was writing junk after the image and soft-bricking units.
+
+v1.4.1.8 - Clock In: echo window no longer discards edges for validation/lock (only skips F1 forwarding). Fixes normal/slow external clocks being ignored when near internal F1 phase; fast clocks and tap were unaffected.
+
+v1.4.1.9 - MOD button (PA1): short-press path uses the same debounced state as op-mode select (not raw GPIO), min press 30 ms, cooldown 250 ms, wait-for-clean-release after fire — reduces mechanical bounce-back; CV gate behavior unchanged.
+
+v1.4.1.10 - Packaging for jolin.tech WebUSB updater: RAW `.bin` padded with 0xFF to 16 KiB flash-sector boundary (no DFU suffix); prefer `.hex` for online programming. Same firmware behavior as v1.4.1.9 (MOD debounce).
+
+v1.4.1.11 - MOD short-press: dedicated 18 ms debounce (not the 50–60 ms op-mode filter) so normal taps register again; min/cooldown tuned; MOD + CV gate stay active while Clock In hard-follow (tap still ignored). Prefer CubeProgrammer if the online updater soft-bricks (HEX/bin packaging is not sufficient alone).
+
+v1.4.1.12 - Packaging restored to historical Jolin format: primary `krono_code_*.bin` is again PlatformIO DFU-suffixed (rename only, as v1.4.0); no RAW-strip / no 0xFF sector pad on the web bin. Optional `*_raw.bin` for Cube. Firmware same as v1.4.1.11.
+
+v1.4.1.13 - MOD short-press: fire on stable press (not release) so brief taps register; debounce 10 ms, cooldown 80 ms.
+
+v1.4.1.14 - Fix mode-change entry blocked by MOD fire-on-press wait-release: TAP hold / op-mode SM preempts short-MOD; clear calc-swap on raw MOD release and when starting TAP qualify.
+
+v1.4.1.15 - Mode-select MOD clicks count on press (not release), matching short-MOD; op-mode MOD debounce 15 ms.
+
+v1.4.1.16 - Fix MOD nearly dead: op-mode SM now uses real TAP pressed (active-low), so IDLE is reachable for short-MOD; removed TAP-down suppress that blocked the only remaining path.
+
+v1.4.1.17 - Short-MOD fires on stable rising edge only; WAIT_RELEASE clears on stable release (fixes double-fire from raw bounce). Op-mode TAP debounced 25 ms so hold qualify is not aborted by micro-glitches / just_exited lock.
+
+v1.4.1.18 - Restore MOD button behaviour to v1.4.0: raw PA1, short action on release (≤500 ms), cooldown 100 ms; op-mode MOD clicks on release with 50 ms debounce; TAP polarity for op-mode SM as in v1.4.0. Clock In hybrid and packaging from later 1.4.1.x kept.

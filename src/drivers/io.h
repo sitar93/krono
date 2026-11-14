@@ -62,6 +62,12 @@ typedef enum {
 void io_init(void);
 
 /**
+ * @brief Release JTAG-only debug pins (PA15 / PB3 / PB4) to GPIO while keeping SWD (PA13/PA14).
+ *        Call once from io_init before drivers claim PB3/PB4 EXTI — do not re-run after EXTI arm.
+ */
+void io_release_jtag_only_pins(void);
+
+/**
  * @brief Initialize the hardware timer based pulse management system.
  * Must be called after system clocks are configured.
  */

@@ -67,13 +67,18 @@
 /** @brief Time window (ms) after the LAST Mode press (while Tap is held) to wait for another Mode press before finalizing Op Mode selection. */
 #define OP_MODE_MULTI_PRESS_WINDOW_MS 500
 
-// --- Calc Mode Swap Timing ---
+// --- Calc Mode Swap / MOD button (PA1) Timing (v1.4.0 behaviour) ---
 
-/** @brief Max duration (ms) for a MODE (PA1) press to be considered a 'short press' for Calc Mode Swap. */
+/** @brief Max duration (ms) for a MODE (PA1) press to count as short press (fire on release). */
 #define CALC_SWAP_MAX_PRESS_DURATION_MS 500
 
-/** @brief Minimum time (ms) between consecutive Calc Mode Swaps to prevent bounce. */
+/** @brief Minimum time (ms) between consecutive short-MOD / calc-swap actions. */
 #define CALC_SWAP_COOLDOWN_MS 100
+
+/**
+ * @brief Op-mode select MOD clicks (Tap-hold + MOD) debounce — v1.4.0 MODE_SWITCH_PA1_DEBOUNCE_MS.
+ */
+#define MOD_BUTTON_DEBOUNCE_MS 50
 
 // --- State Persistence Timing ---
 

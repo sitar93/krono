@@ -174,8 +174,9 @@ static void configure_unused_pins(void) {
     rcc_periph_clock_enable(RCC_GPIOB);
     rcc_periph_clock_enable(RCC_GPIOC);
 
+    /* Do not touch PA13/PA14 (SWD); reclaiming them bricks ST-Link recovery without connect-under-reset. */
     uint32_t unused_pa_pins = GPIO4 | GPIO5 | GPIO6 | GPIO7 | GPIO8 |
-                              GPIO9 | GPIO10 | GPIO11 | GPIO12 | GPIO13 | GPIO14;
+                              GPIO9 | GPIO10 | GPIO11 | GPIO12;
     gpio_mode_setup(GPIOA, GPIO_MODE_INPUT, GPIO_PUPD_PULLUP, unused_pa_pins);
 
     uint32_t unused_pb_pins = GPIO2 | GPIO7;
@@ -251,7 +252,11 @@ static void system_init(void) {
         on_aux_led_blink_request_from_input_handler,
         on_gamma_arm_aux_pattern_from_input_handler,
         on_mod_press);
-    input_handler_update_main_op_mode(g_current_op_mode); 
+    input_handler_update_main_op_mode(g_current_op_mode);
+    /* After input_tempo_init (inside input_handler_init): seed restore interval from flash/load. */
+    input_tempo_set_last_reported_interval(current_state.tempo_interval);
+
+    /* PA15 already claimed in io_init via io_release_jtag_only_pins(); do not re-touch PB3/PB4 after EXTI. */
 
     clock_manager_set_calc_mode(g_current_calc_mode);
     status_led_init(); 

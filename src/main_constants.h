@@ -21,8 +21,6 @@
 #define TAP_QUAD_BLEND_LEADING_NUM 30u
 #define TAP_QUAD_BLEND_TRAILING_NUM 70u
 #define TAP_QUAD_BLEND_DENOM 100u
-/** External clock stability (ms); tap tempo no longer uses spread/median lock. */
-#define MAX_INTERVAL_DIFFERENCE 4000
 /** No tap for this long resets the quadruple click counter (fresh 1–4 cycle). */
 #define TAP_PATTERN_IDLE_RESET_MS 5000u
 #define MIN_INTERVAL 33       // ~1818 BPM upper bound (60000/33)
@@ -35,7 +33,25 @@
 #define DEFAULT_TEMPO_BPM 70
 #define DEFAULT_TEMPO_INTERVAL (60000 / DEFAULT_TEMPO_BPM) // ~857ms
 
-/** Silence on PB3 before external clock is dropped; must exceed longest valid period (MAX_INTERVAL). */
+/**
+ * External-clock stability: triplet is stable if (max-min) <= max(ABS, min*REL/DEN).
+ * ABS=3 ms (1 ms timer resolution); REL=5%. Tunable after hardware tests.
+ */
+#define EXT_CLOCK_STABILITY_ABS_MS  3u
+#define EXT_CLOCK_STABILITY_REL_NUM 5u
+#define EXT_CLOCK_STABILITY_REL_DEN 100u
+
+/**
+ * While hard-following Clock In: drop lock if no in-range edge within
+ * (locked_interval + grace). One missed beat → immediate internal flywheel (no multi-second mute).
+ */
+#define EXT_CLOCK_LOCK_GRACE_MS 15u
+/**
+ * After our own F1, PB3 edges in this window are still measured for lock/tempo but are not
+ * queued for F1 forwarding (avoids double-F1 on 1A/1B autopatch). Must not drop validation.
+ */
+#define EXT_CLOCK_ECHO_WINDOW_MS (DEFAULT_PULSE_DURATION_MS + 10u)
+/** Legacy alias: absolute ceiling only; lock loss uses period+grace via ext_clock_has_lost_lock(). */
 #define EXT_CLOCK_TIMEOUT_MS (MAX_INTERVAL + 3000u)
 
 // Output Pulse Duration is now in variables.h
