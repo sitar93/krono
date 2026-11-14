@@ -6,6 +6,7 @@
 #include "modes/mode_rhythm_shared.h" // For MODE_RHYTHM_NUM_OUTPUTS
 
 #include <libopencm3/stm32/flash.h>
+#include <libopencm3/cm3/cortex.h>
 #include <string.h> // For memcpy and memset
 #include <stddef.h> // For offsetof
 
@@ -159,17 +160,13 @@ bool persistence_save_state(const krono_state_t *state) {
     state_to_write.checksum = 0; // Zero out checksum field before calculating
     state_to_write.checksum = persistence_calculate_checksum(&state_to_write);
 
+    /* Mask IRQs for the whole erase+program window (single-bank F4 stalls fetch). */
+    cm_disable_interrupts();
     flash_unlock();
-    
+
     // Erase sector 7 (0x08060000 - 0x0807FFFF for STM32F411CE)
-    // FLASH_PROGRAM_X32 for F4 is (2 << 8), for erase psize is not used this way in erase func
-    // flash_erase_sector takes sector number and voltage range (which implies psize for erase)
-    // Voltage range 3 (2.7-3.6V) => PSIZE = x32 for erase.
-    // The libopencm3 function `flash_erase_sector` for F4 takes (sector_idx, voltage_idx)
-    // where voltage_idx corresponds to PSIZE. For 2.7-3.6V, voltage_idx is 2 (FLASH_PSIZE_X32 for erase).
-    // Let's assume voltage range allows x32 parallelism. The erase func handles psize.
     flash_erase_sector(7, 2); // Sector 7, Voltage range index 2 (PSIZE x32 for erase)
-    
+
     uint32_t flash_sr_status;
     do {
         flash_sr_status = FLASH_SR;
@@ -177,13 +174,13 @@ bool persistence_save_state(const krono_state_t *state) {
 
     if (flash_sr_status & (FLASH_SR_PGAERR | FLASH_SR_PGPERR | FLASH_SR_PGSERR | FLASH_SR_WRPERR)) {
         flash_lock();
-        return false; // Erase error
+        cm_enable_interrupts();
+        return false;
     }
-    FLASH_CR |= FLASH_CR_PG; // Enable programming
 
     uint32_t *p_src = (uint32_t *)&state_to_write;
     uint32_t flash_addr = PERSISTENCE_FLASH_STORAGE_ADDR;
-    size_t num_words = (sizeof(krono_state_t) + sizeof(uint32_t) - 1) / sizeof(uint32_t); // Ceiling division
+    size_t num_words = (sizeof(krono_state_t) + sizeof(uint32_t) - 1) / sizeof(uint32_t);
 
     for (size_t i = 0; i < num_words; ++i) {
         flash_program_word(flash_addr + (i * sizeof(uint32_t)), p_src[i]);
@@ -191,20 +188,16 @@ bool persistence_save_state(const krono_state_t *state) {
             flash_sr_status = FLASH_SR;
         } while ((flash_sr_status & FLASH_SR_BSY));
         if (flash_sr_status & (FLASH_SR_PGAERR | FLASH_SR_PGPERR | FLASH_SR_PGSERR | FLASH_SR_WRPERR)) {
-            FLASH_CR &= ~FLASH_CR_PG; // Disable programming on error
             flash_lock();
-            return false; // Programming error
+            cm_enable_interrupts();
+            return false;
         }
     }
-    
-    FLASH_CR &= ~FLASH_CR_PG; // Disable programming after successful write
+
     flash_lock();
+    cm_enable_interrupts();
 
     krono_state_t verify_state;
     memcpy(&verify_state, (const void *)PERSISTENCE_FLASH_STORAGE_ADDR, sizeof(krono_state_t));
-    if (memcmp(&state_to_write, &verify_state, sizeof(krono_state_t)) == 0) {
-        return true; 
-    } else {
-        return false; 
-    }
+    return (memcmp(&state_to_write, &verify_state, sizeof(krono_state_t)) == 0);
 }

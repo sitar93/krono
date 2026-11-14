@@ -57,6 +57,26 @@ static volatile pulse_timer_t pulse_timers[NUM_JACK_OUTPUTS];
 
 // --- Public Function Implementations ---
 
+void io_release_jtag_only_pins(void) {
+    /*
+     * After reset, PA13–PA15 / PB3 / PB4 are dedicated SWJ pins (not under GPIO).
+     * RM Table “Flexible SWJ-DP pin assignment”: to keep SWD (PA13/PA14) but free
+     * PA15 (status LED), PB3 (ext clock), PB4 (ext gate), take those three out of AF
+     * by setting MODER to GPIO — do NOT reclaim PA13/PA14.
+     *
+     * Call only before ext_clock / PB4 EXTI setup. Re-running after EXTI arm can leave
+     * the pin/line in a bad state (field freeze after browser DFU on v1.4.1.4).
+     */
+    rcc_periph_clock_enable(RCC_GPIOA);
+    rcc_periph_clock_enable(RCC_GPIOB);
+
+    gpio_mode_setup(GPIOA, GPIO_MODE_OUTPUT, GPIO_PUPD_NONE, GPIO15);
+    gpio_set_output_options(GPIOA, GPIO_OTYPE_PP, GPIO_OSPEED_50MHZ, GPIO15);
+
+    gpio_mode_setup(GPIOB, GPIO_MODE_INPUT, GPIO_PUPD_NONE, GPIO3);
+    gpio_mode_setup(GPIOB, GPIO_MODE_INPUT, GPIO_PUPD_PULLDOWN, GPIO4);
+}
+
 /* General I/O initialization */
 void io_init(void) {
     // Enable clocks for GPIO ports A, B, C
@@ -65,9 +85,9 @@ void io_init(void) {
     rcc_periph_clock_enable(RCC_GPIOC); // Might still be needed for oscillator or other pins
     rcc_periph_clock_enable(RCC_SYSCFG); // Required for EXTI line configuration on F4
 
-    // IMPORTANT: PB3 (Ext Clk) and PB4 (Ext Gate) conflict with SWD/JTAG (SWO, NJTRST).
-    // We assume DFU is used for uploading.
-    // Ensure they aren't configured for SWD/JTAG function in other parts of the setup.
+    // IMPORTANT: PB3/PB4/PA15 are JTAG companions of SWD; release them before use as GPIO.
+    // DFU upload does not need SWD; ST-Link recovery still uses PA13/PA14 (left alone).
+    io_release_jtag_only_pins();
 
     // Input configuration is handled by respective drivers (tap_init, input_handler_init, ext_clock_init)
 
@@ -157,7 +177,7 @@ void tim3_isr(void) {
 // Read digital input state
 bool jack_get_digital_input(jack_input_t input) {
     switch(input) {
-        /* Raw PA0: HIGH = open / idle. Op-mode change SM historically uses this level as "tap_pressed_now". */
+        /* Raw PA0: HIGH = open / idle. Op-mode SM (v1.4.0) uses this level as tap_pressed_now. */
         case JACK_IN_TAP:          return gpio_get(GPIOA, GPIO0);
         case JACK_IN_MODE_SWAP:    return !gpio_get(GPIOA, GPIO1); // PA1 pulled up, pressed = LOW
         case JACK_IN_GATE_SWAP:    return gpio_get(GPIOB, GPIO4);
@@ -222,12 +242,15 @@ void set_output_high_for_duration(jack_output_t jack, uint32_t duration_ms) {
 
     nvic_disable_irq(NVIC_TIM3_IRQ);
 
-    if (!pulse_timers[jack].active) {
-        set_output(jack, true); // Use basic set_output
-        uint32_t current_time = millis();
-        ((volatile pulse_timer_t*)&pulse_timers[jack])->end_time_ms = current_time + duration_ms;
-        ((volatile pulse_timer_t*)&pulse_timers[jack])->active = true;
-    }
+    /*
+     * Always (re)trigger: at high clock rates a new edge often arrives while the previous
+     * pulse is still marked active. Dropping the new request made Group B (and fast mults)
+     * look frozen / silent under external clock.
+     */
+    set_output(jack, true);
+    uint32_t current_time = millis();
+    ((volatile pulse_timer_t *)&pulse_timers[jack])->end_time_ms = current_time + duration_ms;
+    ((volatile pulse_timer_t *)&pulse_timers[jack])->active = true;
 
     nvic_enable_irq(NVIC_TIM3_IRQ);
 }

@@ -1,0 +1,18 @@
+---
+description: Clock In / tap / autopatch regression checklist before changing ext clock
+alwaysApply: true
+---
+
+# Clock In changes — ask and answer from code
+
+Before merging any edit to `ext_clock.*`, `clock_manager.*` (F1/slave), or `input_handler` ext-lock path, re-read those files and answer:
+
+1. **Slow/normal external master (~40–120 BPM)** — Do rising edges still enter validation (interval buffer + ready flag), not only forwarding? Echo must **not** `return` early before measure/lock hold.
+2. **Fast external master** — Still validates; out-of-range still breaks follow without a multi-second mute.
+3. **Tap tempo** — Ignored only while `external_clock_active` hard-follow; works again immediately after `has_lost_lock` / unfollow.
+4. **Autopatch 1A/1B→Clock In** — Internal flywheel still runs; echo may skip **forwarding** only; 1A/1B must not go silent.
+5. **Hard-follow** — While locked, non-echo in-range edges still queue→`apply_external_pulse`; flywheel covers a missed beat.
+6. **Lock loss** — One missed period (+ grace) or OOR, not `EXT_CLOCK_TIMEOUT_MS` (~15 s) as the normal path.
+7. **Release bin** — If shipping firmware, RAW `.bin` (no DFU `UFD` suffix) for the online programmer.
+
+If any answer is “no” or “unclear”, fix before release.

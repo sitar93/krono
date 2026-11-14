@@ -1,5 +1,6 @@
 #include "input_handler.h"
 #include "input_tempo.h"
+#include "clock_manager.h"
 #include "drivers/tap.h"
 #include "drivers/io.h"
 #include "drivers/ext_clock.h"
@@ -16,10 +17,10 @@
 #include <libopencm3/cm3/nvic.h>
 #include <stddef.h> // NULL
 
-#define GATE_SWAP_DEBOUNCE_MS 10 
-#define MODE_SWITCH_PA1_DEBOUNCE_MS 50 
+#define GATE_SWAP_DEBOUNCE_MS 10
 #define OP_MODE_TIMEOUT_SAVE_MS 5000
 #define OP_MODE_CONFIRM_TIMEOUT_MS 10000 // 10 seconds to confirm MOD clicks with TAP
+/* Op-mode PA1 debounce: same value as v1.4.0 MODE_SWITCH_PA1_DEBOUNCE_MS via MOD_BUTTON_DEBOUNCE_MS. */
 
 // --- Forward declarations ---
 static void input_pins_init(void);
@@ -38,9 +39,10 @@ static input_aux_led_blink_request_callback_t aux_led_blink_request_cb = NULL;
 static input_gamma_aux_pattern_callback_t gamma_aux_pattern_cb = NULL;
 static input_mod_press_callback_t mod_press_cb = NULL;
 
-// External Clock State
+// External Clock State (session-scoped; slave only after validated sequence)
 static bool external_clock_active = false;
-static uint32_t last_valid_external_clock_interval = 0;
+static uint32_t tempo_before_ext_ms = 0;
+static uint32_t session_valid_ext_interval_ms = 0;
 
 // Op Mode change State Machine
 typedef enum {
@@ -69,7 +71,7 @@ static bool pa1_mod_change_last_debounced_state = false;
 static bool pa1_mod_change_current_raw_state = false;
 static bool pa1_mod_change_last_raw_state = false;    
 
-// Calc Mode Swap Polling State (PA1 Button)
+/* Calc Mode Swap / short-MOD — v1.4.0: raw PA1, fire on short release. */
 typedef enum {
     CALC_SWAP_SM_IDLE,
     CALC_SWAP_SM_MODE_PRESSED
@@ -123,12 +125,12 @@ static void reset_calc_swap_sm_vars(void) {
     calc_swap_mode_press_start_time = 0;
 }
 
+/** Short-MOD / calc-swap — restored v1.4.0: raw PA1, action on short release. */
 static void handle_button_calc_mode_swap(void) {
     uint32_t now = millis();
-    bool mod_is_pressed_raw = !gpio_get(GPIOA, GPIO1); // true if MOD (PA1) is pressed
+    bool mod_is_pressed_raw = !gpio_get(GPIOA, GPIO1);
     bool current_op_mode_is_fixed = (last_known_main_op_mode == MODE_FIXED);
 
-    /* Modes 12–20: short MOD only (same timing as calc swap elsewhere). No MOD+TAP — tap tempo stays live. */
     if (MODE_USES_MOD_GESTURES(last_known_main_op_mode)) {
         switch (current_calc_swap_sm_state) {
             case CALC_SWAP_SM_IDLE:
@@ -165,7 +167,7 @@ static void handle_button_calc_mode_swap(void) {
             }
             break;
         case CALC_SWAP_SM_MODE_PRESSED:
-            if (!mod_is_pressed_raw) { // MOD button released
+            if (!mod_is_pressed_raw) {
                 if (now - calc_swap_mode_press_start_time <= CALC_SWAP_MAX_PRESS_DURATION_MS) {
                     if (calc_swap_cooldown_ok(now)) {
                         if (current_op_mode_is_fixed) {
@@ -181,7 +183,7 @@ static void handle_button_calc_mode_swap(void) {
                     }
                 }
                 reset_calc_swap_sm_vars();
-            } else { // MOD button still pressed
+            } else {
                 if (now - calc_swap_mode_press_start_time > CALC_SWAP_MAX_PRESS_DURATION_MS) {
                     reset_calc_swap_sm_vars();
                 }
@@ -200,27 +202,28 @@ static void handle_op_mode_sm(uint32_t now, bool tap_pressed_now, bool mod_is_pr
     pa1_mod_change_last_raw_state = pa1_mod_change_current_raw_state;
 
     bool old_debounced_mod_state = pa1_mod_change_last_debounced_state;
-    if ((now - pa1_mod_change_last_event_time) > MODE_SWITCH_PA1_DEBOUNCE_MS) {
+    if ((now - pa1_mod_change_last_event_time) > MOD_BUTTON_DEBOUNCE_MS) {
         if (pa1_mod_change_current_raw_state != pa1_mod_change_last_debounced_state) {
             pa1_mod_change_last_debounced_state = pa1_mod_change_current_raw_state;
         }
     }
-    bool mod_button_is_debounced_pressed = pa1_mod_change_last_debounced_state; 
+    bool mod_button_is_debounced_pressed = pa1_mod_change_last_debounced_state;
     bool mod_button_just_pressed_debounced = (mod_button_is_debounced_pressed && !old_debounced_mod_state);
     bool mod_button_just_released_debounced = (!mod_button_is_debounced_pressed && old_debounced_mod_state);
 
     switch (current_op_mode_sm_state) {
         case INPUT_SM_IDLE:
             if (just_exited_op_mode_sm && !tap_pressed_now) {
-                just_exited_op_mode_sm = false; 
+                just_exited_op_mode_sm = false;
             }
-            if (!just_exited_op_mode_sm && tap_pressed_now && current_calc_swap_sm_state == CALC_SWAP_SM_IDLE) {
+            if (!just_exited_op_mode_sm && tap_pressed_now &&
+                current_calc_swap_sm_state == CALC_SWAP_SM_IDLE) {
                 current_op_mode_sm_state = INPUT_SM_TAP_HELD_QUALIFYING;
                 tap_press_start_time = now;
-                if (tap_detected()) { (void)tap_get_interval(); } 
+                if (tap_detected()) { (void)tap_get_interval(); }
                 input_tempo_reset_calculation();
-                pa1_mod_change_last_debounced_state = mod_is_pressed_raw; 
-                pa1_mod_change_last_event_time = now; 
+                pa1_mod_change_last_debounced_state = mod_is_pressed_raw;
+                pa1_mod_change_last_event_time = now;
             }
             break;
 
@@ -268,7 +271,7 @@ static void handle_op_mode_sm(uint32_t now, bool tap_pressed_now, bool mod_is_pr
                 } else {
                     status_led_set_override(true, true);
                 }
-                if (mod_button_just_released_debounced) { 
+                if (mod_button_just_released_debounced) {
                     op_mode_clicks_count++;
                     mod_pressed_during_tap_hold_phase = true;
                 }
@@ -289,21 +292,21 @@ static void handle_op_mode_sm(uint32_t now, bool tap_pressed_now, bool mod_is_pr
             }
             break;
 
-        case INPUT_SM_AWAITING_MOD_PRESS_OR_TIMEOUT: 
-            if (mod_button_just_pressed_debounced) { 
-                tap_release_time_for_timeout_logic = 0; 
+        case INPUT_SM_AWAITING_MOD_PRESS_OR_TIMEOUT:
+            if (mod_button_just_pressed_debounced) {
+                tap_release_time_for_timeout_logic = 0;
             }
-            if (mod_button_is_debounced_pressed) { 
+            if (mod_button_is_debounced_pressed) {
                 status_led_set_override(true, false);
             } else {
                 status_led_set_override(true, true);
             }
-            if (mod_button_just_released_debounced) { 
+            if (mod_button_just_released_debounced) {
                 op_mode_clicks_count = 1;
                 current_op_mode_sm_state = INPUT_SM_AWAITING_CONFIRM_TAP;
-                mode_confirm_state_enter_time = now; 
-                tap_confirm_action_taken_this_press = false; 
-                return; 
+                mode_confirm_state_enter_time = now;
+                tap_confirm_action_taken_this_press = false;
+                return;
             }
             if (tap_release_time_for_timeout_logic != 0 && (now - tap_release_time_for_timeout_logic >= OP_MODE_TIMEOUT_SAVE_MS)) {
                 if (aux_led_blink_request_cb) { aux_led_blink_request_cb(); } 
@@ -318,9 +321,9 @@ static void handle_op_mode_sm(uint32_t now, bool tap_pressed_now, bool mod_is_pr
             } else {
                 status_led_set_override(true, true);
             }
-            if (mod_button_just_released_debounced) { 
+            if (mod_button_just_released_debounced) {
                 op_mode_clicks_count++;
-                mode_confirm_state_enter_time = now; 
+                mode_confirm_state_enter_time = now;
             }
 
             if (tap_pressed_now) { 
@@ -404,7 +407,8 @@ void input_handler_init(
     last_calc_swap_trigger_time = 0;
     ext_gate_swap_requested = false;
     external_clock_active = false;
-    last_valid_external_clock_interval = 0;
+    tempo_before_ext_ms = 0;
+    session_valid_ext_interval_ms = 0;
     last_known_main_op_mode = MODE_DEFAULT; 
     
     reset_calc_swap_sm_vars();
@@ -418,9 +422,9 @@ void input_handler_update_main_op_mode(operational_mode_t mode) {
 
 void input_handler_update(void) {
     uint32_t now = millis();
-    /* Same raw PA0 semantics as v1.3.x op-mode SM (true when line high / idle). */
+    /* v1.4.0 semantics: raw PA0 high/idle passed as tap_pressed_now to op-mode SM. */
     bool tap_pressed_now = jack_get_digital_input(JACK_IN_TAP);
-    bool mod_is_pressed_raw = !gpio_get(GPIOA, GPIO1); 
+    bool mod_is_pressed_raw = !gpio_get(GPIOA, GPIO1);
 
     handle_op_mode_sm(now, tap_pressed_now, mod_is_pressed_raw);
 
@@ -434,52 +438,78 @@ void input_handler_update(void) {
         return;
     }
 
+    /* Slave only after a completed stable validation — never on raw PB3 presence. */
     if (ext_clock_has_new_validated_interval()) {
         uint32_t validated_interval = ext_clock_get_validated_interval();
         uint32_t event_time = ext_clock_get_last_validated_event_time();
 
-        if (!external_clock_active || validated_interval != last_valid_external_clock_interval) {
-            if (tempo_change_cb && validated_interval > 0) {
-                tempo_change_cb(validated_interval, true, event_time, false);
+        if (validated_interval >= MIN_INTERVAL && validated_interval <= MAX_INTERVAL) {
+            if (!external_clock_active) {
+                /* Order: capture running internal tempo BEFORE any tempo callback. */
+                tempo_before_ext_ms = clock_manager_get_current_tempo_interval();
+                session_valid_ext_interval_ms = validated_interval;
+                external_clock_active = true;
+                clock_manager_begin_external_slave(validated_interval, event_time);
+                /* Side effects (e.g. Aux blink); set_internal_tempo is a no-op for F1 while slaved. */
+                if (tempo_change_cb) {
+                    tempo_change_cb(validated_interval, true, event_time, false);
+                }
+            } else {
+                session_valid_ext_interval_ms = validated_interval;
+                if (tempo_change_cb &&
+                    validated_interval != clock_manager_get_current_tempo_interval()) {
+                    tempo_change_cb(validated_interval, true, event_time, false);
+                }
+            }
+
+            input_tempo_reset_calculation();
+
+            if (current_calc_swap_sm_state != CALC_SWAP_SM_IDLE) {
+                reset_calc_swap_sm_vars();
             }
         }
-        external_clock_active = true;
-        last_valid_external_clock_interval = validated_interval;
-        input_tempo_reset_calculation();
+    }
 
-        if (current_calc_swap_sm_state != CALC_SWAP_SM_IDLE) {
-            reset_calc_swap_sm_vars();
+    bool ext_follow_locked = false;
+    if (external_clock_active) {
+        uint32_t lock_interval = session_valid_ext_interval_ms;
+        if (lock_interval < MIN_INTERVAL || lock_interval > MAX_INTERVAL) {
+            lock_interval = clock_manager_get_current_tempo_interval();
         }
-    } else if (ext_clock_has_timed_out(now)) {
-        if (external_clock_active) {
+
+        if (!ext_clock_has_lost_lock(now, lock_interval)) {
+            ext_follow_locked = true;
+        } else {
             external_clock_active = false;
+            clock_manager_end_external_slave();
+
             if (tempo_change_cb) {
                 uint32_t new_internal_tempo_to_set = DEFAULT_TEMPO_INTERVAL;
 
-                if (last_valid_external_clock_interval > 0 &&
-                    last_valid_external_clock_interval >= MIN_INTERVAL &&
-                    last_valid_external_clock_interval <= MAX_INTERVAL) {
-                    new_internal_tempo_to_set = last_valid_external_clock_interval;
-                } else {
-                    uint32_t last_tap = input_tempo_get_last_reported_interval();
-                    if (last_tap > 0 && last_tap >= MIN_INTERVAL && last_tap <= MAX_INTERVAL) {
-                        new_internal_tempo_to_set = last_tap;
-                    }
+                if (session_valid_ext_interval_ms >= MIN_INTERVAL &&
+                    session_valid_ext_interval_ms <= MAX_INTERVAL) {
+                    new_internal_tempo_to_set = session_valid_ext_interval_ms;
+                } else if (tempo_before_ext_ms >= MIN_INTERVAL &&
+                           tempo_before_ext_ms <= MAX_INTERVAL) {
+                    new_internal_tempo_to_set = tempo_before_ext_ms;
                 }
 
                 input_tempo_set_last_reported_interval(new_internal_tempo_to_set);
+                /* Flywheel: keep last valid tempo; phase already advanced by clock_manager. */
                 tempo_change_cb(new_internal_tempo_to_set, false, now, false);
             }
-            last_valid_external_clock_interval = 0;
+
+            tempo_before_ext_ms = 0;
+            session_valid_ext_interval_ms = 0;
         }
     }
 
-    if (external_clock_active) {
-        return; 
-    }
-
+    /* MOD button + CV gate stay live even while hard-following Clock In. */
     handle_button_calc_mode_swap();
-    input_tempo_handle_tap_event();
+
+    if (!ext_follow_locked) {
+        input_tempo_handle_tap_event();
+    }
 
     if (ext_gate_swap_requested) {
         /* PB4 CV gate: mirror MOD short-press for modes 12–20 and Gamma; else FIXED bank or calc swap. */
@@ -511,9 +541,8 @@ void exti4_isr(void) {
         uint32_t now = millis();
         if (now - last_gate_swap_isr_time >= GATE_SWAP_DEBOUNCE_MS) {
              if (gpio_get(GPIOB, GPIO4)) { // Check if PB4 (CV gate) is high
-                 // Request CV swap if OpMode SM is IDLE and external clock is NOT active
-                 // PA1 (MOD button) status is NOT checked here.
-                 if (current_op_mode_sm_state == INPUT_SM_IDLE && !external_clock_active) {
+                 /* CV mirrors MOD; allowed while Clock In hard-follow (tap still blocked). */
+                 if (current_op_mode_sm_state == INPUT_SM_IDLE) {
                     ext_gate_swap_requested = true;
                  }
                  last_gate_swap_isr_time = now; 

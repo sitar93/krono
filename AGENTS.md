@@ -31,7 +31,7 @@ platformio run -e blackpill_f411ce --target clean
 platformio device monitor
 ```
 
-- Output: `.pio/build/blackpill_f411ce/` — after a successful build, post-scripts produce **`krono_code_<VERSION>.bin`**, **`.elf`**, **`.hex`** (version from the last non-empty line of **`CHANGELOG.txt`**, currently **v1.4.0**).
+- Output: `.pio/build/blackpill_f411ce/` — **`krono_code_<VERSION>.bin`** = PlatformIO DFU-suffixed image (**same as v1.4.0**; required by https://jolin.tech/krono_updater), **`.hex`**, **`.elf`**, optional **`_raw.bin`** (Cube only). Do not strip/pad the primary web `.bin`. Version from **`CHANGELOG.txt`**.
 - **No automated tests** — verify on hardware after upload.
 
 ### Upload (DFU)
@@ -87,9 +87,9 @@ platformio.ini
 3. `main.c` — `on_tap_tempo_change` → `clock_manager_arm_tap_quadruple_boundary()` on tap 4/8/…, else `clock_manager_set_internal_tempo()` (external / fallback).
 4. `clock_manager.c` — schedules F1; passes `mode_context_t` to active `mode_*_update()`.
 
-**Current tap policy (v1.4.0):** Boundaries **4, 8, 12, …** each fire **F1** once and set tempo from the **median** of three gaps (carry-in after a boundary still dropped). **Leading** boundaries (4, 12, …): emit that median. **Trailing** (8, 16, …): if **≤ `TAP_QUAD_BLEND_WINDOW_MS`** (3 s) after the previous leading press, tempo = **(30×leading median + 70×trailing median) / 100** (rounded); else trailing median only. Clicks between boundaries do not retune. **`TAP_PATTERN_IDLE_RESET_MS`** (5 s) resets the pattern. **`clock_manager_arm_tap_quadruple_boundary`** runs in **`clock_manager_update`**. External clock unchanged.
+**Current tap policy (v1.4.0):** Boundaries **4, 8, 12, …** each fire **F1** once and set tempo from the **median** of three gaps (carry-in after a boundary still dropped). **Leading** boundaries (4, 12, …): emit that median. **Trailing** (8, 16, …): if **≤ `TAP_QUAD_BLEND_WINDOW_MS`** (3 s) after the previous leading press, tempo = **(30×leading median + 70×trailing median) / 100** (rounded); else trailing median only. Clicks between boundaries do not retune. **`TAP_PATTERN_IDLE_RESET_MS`** (5 s) resets the pattern. **`clock_manager_arm_tap_quadruple_boundary`** runs in **`clock_manager_update`**.
 
-**External clock:** `ext_clock.c` validated intervals override tap; timeout falls back to internal tempo.
+**External clock (v1.4.1.6):** PB3 rising edges are measured while **internal F1 always keeps running** (flywheel). Hard-follow starts only after a **stable triplet** (`max−min ≤ max(EXT_CLOCK_STABILITY_ABS_MS, min×5%)`). Edges within `EXT_CLOCK_ECHO_WINDOW_MS` of a local F1 are still measured for validation/lock but **not** queued for F1 forwarding (autopatch must not double-F1; must not drop real masters near our tempo). On first lock: save `tempo_before_ext_ms`, `clock_manager_begin_external_slave()` (flush queue, arm forwarding, one F1 on validating edge; mode update deferred). While following, in-range non-echo edges snap F1; out-of-range edges break follow immediately. Lock loss: no non-echo in-range edge within `(locked_interval + EXT_CLOCK_LOCK_GRACE_MS)` → end follow and keep session tempo on the flywheel (no multi-second mute). Tap is ignored only while hard-following. Unfollow restore priority: **session** validated interval → `tempo_before_ext_ms` → `DEFAULT_TEMPO_INTERVAL`. PB3 stays `GPIO_PUPD_NONE`; never reclaim **PA13/PA14** (SWD). Free **PA15/PB3/PB4** once in `io_init` via `io_release_jtag_only_pins()` (**v1.4.1.4/1.5** — do not re-run after EXTI arm). **v1.4.1.3+:** queued edges use per-edge timestamps; wall-clock mode update while following; pulses retrigger.
 
 ### BETA / OMEGA selection (mode families)
 
@@ -180,9 +180,11 @@ Mode-family selection reuses the **same** op-mode change state machine as modes 
 - Modes 12–30 MOD short ignored → check `CALC_SWAP_MAX_PRESS_DURATION_MS`, cooldown (`last_calc_swap_trigger_time`), `INPUT_SM_IDLE` gating, and `external_clock_active` early return.
 - Multi-pulse Aux looks like one long blink if fired as two quick `aux_led_blink_request_cb()` calls → use `krono_aux_led_pattern_start()` + pump + `krono_aux_led_pattern_active()` guard in `main.c`.
 - Status LED “off” segments look lit, or mode 20 shows too many flashes → check `set_led()` vs LED wiring (logical on/off vs GPIO); verify `pending_off_gap_ms` and pulse indices in `status_led_update()`.
-- External clock issues → `external_clock_active` gating in `input_handler_update()`.
+- External clock issues → hard-follow only after validation; forwarding/`ext_clock_arm_slave_forwarding`; lock loss = one missed beat or out-of-range; echo window for autopatch; restore uses session/`tempo_before_ext_ms`.
+- Internal tempo jumps to ~70 BPM after noise → ensure follow is not armed on raw presence; check unfollow restore path.
+- Autopatch 1A/1B→Clock In double-hits → confirm echo skips forwarding only; normal/slow Clock In ignored → echo must not drop validation.
 
-**Manual checks:** steady taps → lock on 4th tap; ext clock priority; disconnect ext clock → fallback.
+**Manual checks:** steady taps → lock on 4th tap; Clock In unpatched → internal F1 stable; ext lock after ~4 edges; disconnect → session/pre-slave tempo (not accidental default); re-plug same BPM → re-slave.
 
 ---
 
@@ -210,10 +212,10 @@ Use **Tasks: Run Task** for `PlatformIO: Build/Upload/Clean` if defined in `.vsc
 
 ### When asked to create release files (agents)
 
-1. Ensure **`CHANGELOG.txt`** reflects the **current** release (the **last non-empty line** must start with `vX.Y.Z` — see `scripts/get_version.py`).
+1. Ensure **`CHANGELOG.txt`** reflects the **current** release (the **last non-empty line** must start with `vX.Y.Z` or `vX.Y.Z.W` — see `scripts/get_version.py`).
 2. Run `platformio run -e blackpill_f411ce -t clean` then `platformio run -e blackpill_f411ce`.
-3. Create **`release/vX.Y.Z/`** (match the version from step 1).
-4. Copy **`krono_code_vX.Y.Z.bin`**, **`.hex`**, and **`.elf`** from `.pio/build/blackpill_f411ce/` into that folder — or run **`powershell -ExecutionPolicy Bypass -File scripts/release_bundle.ps1`** from the repo root after the build (parses version from **`CHANGELOG.txt`**).
+3. Create **`release/<version>/`** (match the version from step 1).
+4. Copy **`krono_code_<version>.bin`** (DFU-suffixed, historical), **`.hex`**, **`.elf`**, optional **`_raw.bin`** — or run **`powershell -ExecutionPolicy Bypass -File scripts/release_bundle.ps1`** (requires UFD suffix on primary `.bin`).
 5. Add **`release_notes.txt`** in the same folder: **Markdown** for GitHub **Draft a new release** (description field). Use a **discursive, user-facing** tone: what changed, **why it helps**, and what things **are** (avoid C identifiers, file names, and callback names). For the **status LED**, include the **operational modes table** as in **`README.md`** (same Markdown table). Optionally add a short maintainer footer (build/DFU pointer). Do **not** name this file `README.txt`.
 6. **DFU upload:** from repo root, **`powershell -ExecutionPolicy Bypass -File scripts/dfu_upload.ps1`** runs PlatformIO upload for `blackpill_f411ce` (device in STM32 bootloader — see **Upload (DFU)** above; uses `%USERPROFILE%\.platformio\penv\Scripts\platformio.exe` when present).
 

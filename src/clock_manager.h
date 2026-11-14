@@ -32,6 +32,25 @@ void clock_manager_set_internal_tempo(uint32_t interval_ms, bool is_external_clo
 void clock_manager_arm_tap_quadruple_boundary(uint32_t interval_ms, uint32_t event_timestamp_ms);
 
 /**
+ * @brief Enable or disable hard-follow of F1 to external clock rising edges.
+ *        Prefer clock_manager_begin_external_slave / end_external_slave for session transitions.
+ *        Internal flywheel remains active either way.
+ */
+void clock_manager_set_external_clock_slaved(bool slaved);
+
+/**
+ * @brief Enter Clock In hard-follow: set tempo, arm F1 forwarding (flush backlog), apply exactly
+ *        one F1 for the validating edge, then snap to subsequent non-echo edges. Internal timer
+ *        stays as flywheel if a beat is missed.
+ */
+void clock_manager_begin_external_slave(uint32_t interval_ms, uint32_t validating_edge_ms);
+
+/**
+ * @brief Leave Clock In hard-follow (disarm forwarding + clear follow). Tempo restore is caller's job.
+ */
+void clock_manager_end_external_slave(void);
+
+/**
  * @brief Gets the current active tempo interval being used by the clock manager.
  * @return uint32_t The current tempo interval in milliseconds.
  */

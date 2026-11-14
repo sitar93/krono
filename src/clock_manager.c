@@ -29,14 +29,19 @@ static uint32_t last_update_time_ms = 0; // For ms_since_last_call
 static uint32_t f1_tick_counter = 0; // Counter for mode context
 static bool sync_requested = false; // Flag for mode sync
 static bool calc_mode_just_changed = false; // Flag for mode calc switch
+static bool external_clock_slaved = false;
 
 static bool pending_tap_quadruple_boundary = false;
 static uint32_t pending_tap_quadruple_interval_ms = 0;
 static uint32_t pending_tap_quadruple_t0_ms = 0;
+/** Validating-edge F1 already pulsed in begin_external_slave; mode update deferred to clock_manager_update. */
+static bool pending_ext_slave_validate_mode = false;
 
 // --- Helper Functions ---
 
 static void generate_f1_pulse(void) {
+    /* Echo window starts even if Omega skips 1A/1B GPIO (still a logical F1). */
+    ext_clock_note_local_f1_pulse(millis());
     if (!MODE_SKIPS_AUTO_F1_CLOCK_ON_1AB(current_op_mode)) {
         set_output_high_for_duration(JACK_OUT_1A, DEFAULT_PULSE_DURATION_MS);
         set_output_high_for_duration(JACK_OUT_1B, DEFAULT_PULSE_DURATION_MS);
@@ -77,6 +82,49 @@ static void (*mode_update_functions[NUM_OPERATIONAL_MODES])(const mode_context_t
     [MODE_GAMMA_START_STOP] = mode_gamma_start_stop_update
 };
 
+static uint32_t snap_phase_to_grid(uint32_t t0, uint32_t now, uint32_t interval_ms) {
+    /* t0 == 0 is a valid millis() value after wrap; only reject future anchors. */
+    if (interval_ms == 0u || t0 > now) {
+        return now;
+    }
+    uint32_t late = now - t0;
+    uint32_t k = late / interval_ms;
+    return t0 + k * interval_ms;
+}
+
+static void run_mode_update(uint32_t now, bool f1_tick_this_cycle) {
+    uint32_t ms_since_last_update = now - last_update_time_ms;
+
+    current_mode_context.current_time_ms = now;
+    current_mode_context.current_tempo_interval_ms = active_tempo_interval_ms;
+    current_mode_context.calc_mode_changed = calc_mode_just_changed;
+    current_mode_context.f1_rising_edge = f1_tick_this_cycle;
+    current_mode_context.f1_counter = f1_tick_counter;
+    current_mode_context.ms_since_last_call = ms_since_last_update;
+    current_mode_context.sync_request = sync_requested;
+
+    if (current_mode_context.bypass_first_update) {
+        current_mode_context.bypass_first_update = false;
+    } else if (mode_update_functions[current_op_mode] != NULL) {
+        mode_update_functions[current_op_mode](&current_mode_context);
+    }
+
+    sync_requested = false;
+    calc_mode_just_changed = false;
+    last_update_time_ms = now;
+}
+
+static void apply_external_pulse(uint32_t edge_ms) {
+    uint32_t now = millis();
+    uint32_t t = edge_ms;
+    if (t > now) {
+        t = now;
+    }
+    last_f1_pulse_time_ms = t;
+    generate_f1_pulse();
+    f1_tick_counter++;
+}
+
 // --- Public Function Implementations ---
 
 void clock_manager_init(operational_mode_t initial_op_mode, uint32_t initial_tempo_interval) {
@@ -85,6 +133,7 @@ void clock_manager_init(operational_mode_t initial_op_mode, uint32_t initial_tem
     active_tempo_interval_ms = initial_tempo_interval;
     last_f1_pulse_time_ms = millis(); // Initialize to prevent immediate pulse
     f1_tick_counter = 0;
+    external_clock_slaved = false;
 
     // Initialize context (some parts will be updated each cycle)
     current_mode_context.f1_rising_edge = false;
@@ -107,26 +156,55 @@ void clock_manager_arm_tap_quadruple_boundary(uint32_t interval_ms, uint32_t eve
     }
 }
 
+void clock_manager_set_external_clock_slaved(bool slaved) {
+    external_clock_slaved = slaved;
+}
+
+void clock_manager_begin_external_slave(uint32_t interval_ms, uint32_t validating_edge_ms) {
+    if (interval_ms == 0u) {
+        return;
+    }
+
+    active_tempo_interval_ms = interval_ms;
+
+    /*
+     * Hard-follow Clock In: arm edge→F1 forwarding for subsequent non-echo edges.
+     * Internal timer keeps running as flywheel (see clock_manager_update).
+     * Validating edge gets exactly one F1 here; mode update runs in clock_manager_update.
+     */
+    ext_clock_arm_slave_forwarding();
+    external_clock_slaved = true;
+
+    apply_external_pulse(validating_edge_ms);
+    pending_ext_slave_validate_mode = true;
+}
+
+void clock_manager_end_external_slave(void) {
+    ext_clock_disarm_slave_forwarding();
+    external_clock_slaved = false;
+    pending_ext_slave_validate_mode = false;
+}
+
 void clock_manager_set_internal_tempo(uint32_t interval_ms, bool is_external_clock, uint32_t event_timestamp_ms) {
+    (void)is_external_clock;
     if (interval_ms > 0) {
         uint32_t now = millis();
         uint32_t t0 = event_timestamp_ms;
-        if (t0 == 0u || t0 > now) {
+        if (t0 > now) {
             t0 = now;
         }
         active_tempo_interval_ms = interval_ms;
-        /*
-         * External clock: snap last_f1 <= now on the t0-aligned grid.
-         * Tap tempo uses clock_manager_arm_tap_quadruple_boundary for clicks 4/8/…; this path is
-         * external + ext-clock fallback only here.
-         */
-        if (!is_external_clock) {
-            last_f1_pulse_time_ms = t0;
-        } else {
-            uint32_t late = now - t0;
-            uint32_t k = late / interval_ms;
-            last_f1_pulse_time_ms = t0 + k * interval_ms;
+
+        if (external_clock_slaved) {
+            /* Follow mode: accept tempo updates; phase stays on last ext/internal F1. */
+            return;
         }
+
+        /*
+         * Internal/tap fallback: align phase to the anchor on the tempo grid.
+         * Tap boundaries use clock_manager_arm_tap_quadruple_boundary instead.
+         */
+        last_f1_pulse_time_ms = snap_phase_to_grid(t0, now, interval_ms);
     }
 }
 
@@ -152,64 +230,65 @@ void clock_manager_set_operational_mode(operational_mode_t new_mode) {
 
 void clock_manager_update(void) {
     uint32_t now = millis();
-    bool f1_tick_this_cycle = false;
-    uint32_t ms_since_last_update = now - last_update_time_ms;
+    bool frame_had_f1 = false;
+    bool did_ext_edge_mode = false;
 
+    if (external_clock_slaved) {
+        if (pending_ext_slave_validate_mode) {
+            pending_ext_slave_validate_mode = false;
+            run_mode_update(now, true);
+            frame_had_f1 = true;
+            did_ext_edge_mode = true;
+        }
+        uint32_t edge_ms = 0;
+        while (ext_clock_consume_pulse(&edge_ms)) {
+            uint32_t t = edge_ms;
+            if (t > now) {
+                t = now;
+            }
+            apply_external_pulse(t);
+            /* Use edge time so queued bursts keep distinct phase for mult/div modes. */
+            run_mode_update(t, true);
+            frame_had_f1 = true;
+            did_ext_edge_mode = true;
+        }
+    }
+
+    /*
+     * Internal flywheel always armed: while hard-following, ext edges reset last_f1 so this
+     * path only fires when a beat is missed (or when not following). Autopatch stays alive.
+     */
     if (pending_tap_quadruple_boundary) {
         pending_tap_quadruple_boundary = false;
         uint32_t t0 = pending_tap_quadruple_t0_ms;
-        if (t0 == 0u || t0 > now) {
+        if (t0 > now) {
             t0 = now;
         }
         active_tempo_interval_ms = pending_tap_quadruple_interval_ms;
-        last_f1_pulse_time_ms = t0;
+        last_f1_pulse_time_ms = snap_phase_to_grid(t0, now, active_tempo_interval_ms);
         generate_f1_pulse();
         f1_tick_counter += 1u;
-        f1_tick_this_cycle = true;
-    } else if (active_tempo_interval_ms > 0 && (now - last_f1_pulse_time_ms) >= active_tempo_interval_ms) {
-        uint32_t late = now - last_f1_pulse_time_ms;
-        uint32_t n = late / active_tempo_interval_ms;
-        if (n < 1) {
-            n = 1;
-        }
-        last_f1_pulse_time_ms += n * active_tempo_interval_ms;
+        frame_had_f1 = true;
+    } else if (active_tempo_interval_ms > 0 &&
+               (now - last_f1_pulse_time_ms) >= active_tempo_interval_ms) {
+        last_f1_pulse_time_ms += active_tempo_interval_ms;
         generate_f1_pulse();
-        f1_tick_this_cycle = true;
-        f1_tick_counter += n;
+        f1_tick_counter++;
+        frame_had_f1 = true;
     }
 
-    // --- Update Mode Context ---
-    current_mode_context.current_time_ms = now;
-    current_mode_context.current_tempo_interval_ms = active_tempo_interval_ms;
-    // current_mode_context.calc_mode is updated by clock_manager_set_calc_mode
-    current_mode_context.calc_mode_changed = calc_mode_just_changed; // Pass flag
-    current_mode_context.f1_rising_edge = f1_tick_this_cycle;
-    current_mode_context.f1_counter = f1_tick_counter;
-    current_mode_context.ms_since_last_call = ms_since_last_update;
-    current_mode_context.sync_request = sync_requested; // Pass flag
-
-    // --- Call Active Mode Update (or bypass if flagged) ---
-    if (current_mode_context.bypass_first_update) {
-        current_mode_context.bypass_first_update = false; // Reset flag and skip update this cycle
-    } else {
-        if (mode_update_functions[current_op_mode] != NULL) {
-            mode_update_functions[current_op_mode](&current_mode_context);
+    if (external_clock_slaved) {
+        if (!did_ext_edge_mode && frame_had_f1) {
+            run_mode_update(now, true);
         }
+        /*
+         * Time-based mult needs non-F1 updates between edges so fast ext clocks do not starve.
+         */
+        run_mode_update(now, false);
+    } else {
+        run_mode_update(now, frame_had_f1);
     }
-
-    // Reset sync/calc mode flags after they have been processed (or bypassed)
-    sync_requested = false;
-    calc_mode_just_changed = false;
-
-    // Update time for next cycle
-    last_update_time_ms = now;
 }
-
-// This is the old simple sync, now replaced by the one below
-// void clock_manager_sync(void) {
-//     last_f1_pulse_time_ms = millis();
-//     f1_tick_counter = 0;
-// }
 
 /**
  * @brief Sets flags to indicate a sync event should occur on the next update cycle.
@@ -218,10 +297,7 @@ void clock_manager_update(void) {
 void clock_manager_sync_flags(bool is_calc_mode_change) {
     sync_requested = true;
     calc_mode_just_changed = is_calc_mode_change;
-    // Reset F1 counter immediately upon sync request?
     f1_tick_counter = 0;
-    // Reset internal pulse timer as well?
-    // last_f1_pulse_time_ms = millis(); // Maybe not, let mode handle sync
 }
 
 void clock_manager_restart_beat_phase_now(void) {

@@ -12,7 +12,13 @@ typedef void (*input_tempo_emit_callback_t)(uint32_t new_interval_ms, bool is_ex
                                             bool tap_quadruple_boundary);
 
 void input_tempo_init(input_tempo_emit_callback_t emit_cb);
+
+/** Reset tap quadruple pattern state only (does not clear last reported tempo). */
 void input_tempo_reset_calculation(void);
+
+/** Explicitly clear the last reported tap/restore interval. */
+void input_tempo_clear_last_reported(void);
+
 void input_tempo_handle_tap_event(void);
 uint32_t input_tempo_get_last_reported_interval(void);
 void input_tempo_set_last_reported_interval(uint32_t interval_ms);

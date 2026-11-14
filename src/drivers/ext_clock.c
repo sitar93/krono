@@ -1,231 +1,317 @@
 #include "drivers/ext_clock.h"
-#include "main_constants.h" // For millis declaration and timing constants like MAX_INTERVAL_DIFFERENCE, EXT_CLOCK_TIMEOUT_MS
-#include "variables.h"      // For timing constants like MIN_INTERVAL, MAX_INTERVAL
+#include "main_constants.h"
+#include "variables.h"
 
 #include <libopencm3/stm32/rcc.h>
 #include <libopencm3/stm32/gpio.h>
 #include <libopencm3/stm32/exti.h>
 #include <libopencm3/cm3/nvic.h>
-#include <libopencm3/stm32/syscfg.h> // Required for SYSCFG clock enable (F4)
+#include <libopencm3/stm32/syscfg.h>
 #include <stdint.h>
 #include <stdbool.h>
-#include <limits.h> // For UINT32_MAX
+#include <limits.h>
 
 // --- Configuration ---
 #define EXT_CLOCK_PORT GPIOB
 #define EXT_CLOCK_PIN GPIO3
 #define EXT_CLOCK_EXTI EXTI3
-#define EXT_CLOCK_NVIC_IRQ NVIC_EXTI3_IRQ // EXTI3 has its own IRQ
+#define EXT_CLOCK_NVIC_IRQ NVIC_EXTI3_IRQ
 
-// Define min/max intervals (for basic validation)
-// Using MIN_INTERVAL and MAX_INTERVAL from main_constants.h for consistency
-// #define MIN_EXT_CLOCK_INTERVAL_MS 20 // Use MIN_INTERVAL from variables.h
-// #define MAX_EXT_CLOCK_INTERVAL_MS 3000 // Use MAX_INTERVAL from variables.h
-
-// Validation settings
-#define NUM_EXT_INTERVALS_FOR_VALIDATION 3 // Number of stable intervals needed
-// Use MAX_INTERVAL_DIFFERENCE from main_constants.h for stability threshold
-#define EXT_CLOCK_DEBOUNCE_MS 5 // Debounce time in ms
+#define NUM_EXT_INTERVALS_FOR_VALIDATION 3
+#define EXT_CLOCK_DEBOUNCE_MS 5
 
 // --- Internal State ---
-static volatile uint32_t last_pulse_time_ms = 0; // Time of the last valid pulse start (after debounce)
-static volatile uint32_t last_isr_time_ms = 0;   // Time of the last ISR execution (after debounce)
-static volatile uint32_t validated_interval_ms = 0; // Last validated stable interval
-static volatile uint32_t last_validated_event_time_ms = 0; // Timestamp of the validating pulse
-static volatile bool g_ext_clock_validated_interval_ready = false; // Flag for input_handler to check
+static volatile uint32_t last_edge_time_ms = 0;
+static volatile bool has_last_edge = false;
+static volatile uint32_t last_in_range_activity_ms = 0;
+static volatile bool has_in_range_activity = false;
+static volatile uint32_t last_debounce_time_ms = 0;
+static volatile bool has_debounce_time = false;
 
-// Validation buffer state
+static volatile uint32_t validated_interval_ms = 0;
+static volatile bool has_validated_interval = false;
+static volatile uint32_t last_validated_event_time_ms = 0;
+static volatile bool g_ext_clock_validated_interval_ready = false;
+
+static volatile bool ext_clock_forwarding_enabled = false;
+static volatile bool ext_clock_out_of_range_break = false;
+static volatile uint32_t last_local_f1_ms = 0;
+static volatile bool has_local_f1 = false;
+
+#define EXT_CLOCK_PULSE_QUEUE_LEN 8u
+static volatile uint32_t g_ext_clock_pulse_queue[EXT_CLOCK_PULSE_QUEUE_LEN];
+static volatile uint8_t g_ext_clock_pulse_queue_head = 0;
+static volatile uint8_t g_ext_clock_pulse_queue_tail = 0;
+
 static uint32_t ext_intervals[NUM_EXT_INTERVALS_FOR_VALIDATION] = {0};
 static uint8_t ext_interval_index = 0;
 
-
-// ISR for EXTI3 (this file handles its own ISR)
-void exti3_isr(void) {
-    if (exti_get_flag_status(EXT_CLOCK_EXTI)) {
-        ext_clock_handle_irq(); // Call the handler
-        exti_reset_request(EXT_CLOCK_EXTI); // Clear the interrupt flag
+static void ext_clock_queue_pulse_unlocked(uint32_t pulse_time_ms) {
+    uint8_t next_head = (uint8_t)((g_ext_clock_pulse_queue_head + 1u) % EXT_CLOCK_PULSE_QUEUE_LEN);
+    if (next_head == g_ext_clock_pulse_queue_tail) {
+        g_ext_clock_pulse_queue_tail =
+            (uint8_t)((g_ext_clock_pulse_queue_tail + 1u) % EXT_CLOCK_PULSE_QUEUE_LEN);
     }
+    g_ext_clock_pulse_queue[g_ext_clock_pulse_queue_head] = pulse_time_ms;
+    g_ext_clock_pulse_queue_head = next_head;
 }
 
-// Reset helper for validation buffer
+static void ext_clock_flush_pulse_queue_unlocked(void) {
+    g_ext_clock_pulse_queue_head = 0;
+    g_ext_clock_pulse_queue_tail = 0;
+}
+
+static uint32_t stability_tolerance_ms(uint32_t min_interval_ms) {
+    uint32_t rel = (min_interval_ms * EXT_CLOCK_STABILITY_REL_NUM) / EXT_CLOCK_STABILITY_REL_DEN;
+    if (rel < EXT_CLOCK_STABILITY_ABS_MS) {
+        return EXT_CLOCK_STABILITY_ABS_MS;
+    }
+    return rel;
+}
+
 static void reset_ext_clock_validation_buffer(void) {
     ext_interval_index = 0;
     for (int i = 0; i < NUM_EXT_INTERVALS_FOR_VALIDATION; i++) {
         ext_intervals[i] = 0;
     }
-    // Don't reset validated_interval_ms here; keep the last known good one until a new one is found.
 }
 
+static bool edge_is_local_echo_unlocked(uint32_t now) {
+    if (!has_local_f1) {
+        return false;
+    }
+    return ((uint32_t)(now - last_local_f1_ms) < EXT_CLOCK_ECHO_WINDOW_MS);
+}
+
+void exti3_isr(void) {
+    if (exti_get_flag_status(EXT_CLOCK_EXTI)) {
+        ext_clock_handle_irq();
+        exti_reset_request(EXT_CLOCK_EXTI);
+    }
+}
 
 /**
- * @brief Actual handler logic called by the ISR. Handles debounce and validation.
+ * @brief Rising-edge EXTI handler. Debounce, measure intervals, validate, optional F1 queue.
+ *        EXTI rising is authoritative — pin may already be LOW when the ISR runs.
  */
 void ext_clock_handle_irq(void) {
     uint32_t now = millis();
 
-    // Basic Debounce: Ignore if interrupt happens too quickly after the last one.
-    if (now - last_isr_time_ms < EXT_CLOCK_DEBOUNCE_MS) {
-        return; // Ignore bounce
+    if (has_debounce_time && (now - last_debounce_time_ms) < EXT_CLOCK_DEBOUNCE_MS) {
+        return;
     }
-    // Record time of this (debounced) ISR execution *before* checking pin state
-    last_isr_time_ms = now; 
+    last_debounce_time_ms = now;
+    has_debounce_time = true;
 
-    // Only process RISING edges (check pin state AFTER debounce period)
-    if (gpio_get(EXT_CLOCK_PORT, EXT_CLOCK_PIN)) {
-        
-        if (last_pulse_time_ms != 0) {
-            // Calculate interval from the *start* of the last valid pulse
-            uint32_t interval = now - last_pulse_time_ms;
+    /*
+     * Echo of our own F1 (1A/1B → Clock In): still measure/validate/hold lock so a real
+     * external master near our tempo is not dropped. Only skip F1 forwarding to avoid
+     * double-trigger while autopatching or phase-aligned.
+     */
+    bool is_echo = edge_is_local_echo_unlocked(now);
 
-            // Basic interval range check (using defines from variables.h)
-            if (interval >= MIN_INTERVAL && interval <= MAX_INTERVAL) {
-                // Store valid interval in the buffer
-                ext_intervals[ext_interval_index++] = interval;
+    /* Accepted rising edge (post-debounce). */
+    if (has_last_edge) {
+        uint32_t interval = now - last_edge_time_ms;
 
-                // Check if buffer is full
-                if (ext_interval_index >= NUM_EXT_INTERVALS_FOR_VALIDATION) {
-                    // Buffer full, check for stability
-                    uint64_t interval_sum = 0;
-                    uint32_t min_val = UINT32_MAX, max_val = 0;
-                    for (int i = 0; i < NUM_EXT_INTERVALS_FOR_VALIDATION; i++) {
-                        interval_sum += ext_intervals[i];
-                        if (ext_intervals[i] < min_val) min_val = ext_intervals[i];
-                        if (ext_intervals[i] > max_val) max_val = ext_intervals[i];
+        if (interval >= MIN_INTERVAL && interval <= MAX_INTERVAL) {
+            last_in_range_activity_ms = now;
+            has_in_range_activity = true;
+
+            if (ext_clock_forwarding_enabled && !is_echo) {
+                ext_clock_queue_pulse_unlocked(now);
+            }
+
+            ext_intervals[ext_interval_index++] = interval;
+            if (ext_interval_index >= NUM_EXT_INTERVALS_FOR_VALIDATION) {
+                uint64_t interval_sum = 0;
+                uint32_t min_val = UINT32_MAX;
+                uint32_t max_val = 0;
+                for (int i = 0; i < NUM_EXT_INTERVALS_FOR_VALIDATION; i++) {
+                    interval_sum += ext_intervals[i];
+                    if (ext_intervals[i] < min_val) {
+                        min_val = ext_intervals[i];
                     }
-
-                    // Use MAX_INTERVAL_DIFFERENCE from main_constants.h for stability check
-                    if ((max_val - min_val) <= MAX_INTERVAL_DIFFERENCE) {
-                        // Intervals are stable, calculate average
-                        uint32_t avg_interval = (uint32_t)(interval_sum / NUM_EXT_INTERVALS_FOR_VALIDATION);
-
-                        // Sanity check average against absolute min/max
-                        if (avg_interval < MIN_INTERVAL) avg_interval = MIN_INTERVAL;
-                        if (avg_interval > MAX_INTERVAL) avg_interval = MAX_INTERVAL;
-
-                        // Atomically update the validated interval and set the flag
-                        // Check if the new validated interval is actually different from the current one
-                        // to avoid unnecessary signaling.
-                        if (avg_interval != validated_interval_ms) {
-                             nvic_disable_irq(EXT_CLOCK_NVIC_IRQ); // Protect access
-                             validated_interval_ms = avg_interval;
-                             last_validated_event_time_ms = now; // Store timestamp of the validating pulse
-                             g_ext_clock_validated_interval_ready = true; // Signal input_handler
-                             nvic_enable_irq(EXT_CLOCK_NVIC_IRQ);
-                        }
+                    if (ext_intervals[i] > max_val) {
+                        max_val = ext_intervals[i];
                     }
-                    // Reset buffer regardless of stability to start collecting next set
-                    reset_ext_clock_validation_buffer();
                 }
-            } else {
-                // Interval out of range, reset validation process
+
+                uint32_t tolerance = stability_tolerance_ms(min_val);
+                if ((max_val - min_val) <= tolerance) {
+                    uint32_t avg_interval =
+                        (uint32_t)(interval_sum / NUM_EXT_INTERVALS_FOR_VALIDATION);
+                    if (avg_interval < MIN_INTERVAL) {
+                        avg_interval = MIN_INTERVAL;
+                    }
+                    if (avg_interval > MAX_INTERVAL) {
+                        avg_interval = MAX_INTERVAL;
+                    }
+
+                    validated_interval_ms = avg_interval;
+                    has_validated_interval = true;
+                    last_validated_event_time_ms = now;
+                    g_ext_clock_validated_interval_ready = true;
+                }
                 reset_ext_clock_validation_buffer();
-                // Consider resetting validated_interval_ms to 0? Or keep last good one? Keep last good for now.
+            }
+        } else {
+            /* Out of range: break hard-follow immediately; do not refresh lock activity. */
+            reset_ext_clock_validation_buffer();
+            if (ext_clock_forwarding_enabled) {
+                ext_clock_out_of_range_break = true;
             }
         }
-        // Record the time of this valid pulse start *after* processing interval
-        last_pulse_time_ms = now;
     }
-    // Ignore FALLING edges
+
+    last_edge_time_ms = now;
+    has_last_edge = true;
 }
 
-
-/**
- * @brief Initializes the External Clock input pin (PB3) and EXTI settings.
- */
 void ext_clock_init(void) {
-    rcc_periph_clock_enable(RCC_GPIOB); // Clock for GPIOB
-    rcc_periph_clock_enable(RCC_SYSCFG); // Clock for SYSCFG (needed for EXTI config on F4)
+    rcc_periph_clock_enable(RCC_GPIOB);
+    rcc_periph_clock_enable(RCC_SYSCFG);
 
-    gpio_mode_setup(EXT_CLOCK_PORT, GPIO_MODE_INPUT, GPIO_PUPD_NONE, EXT_CLOCK_PIN); // Configure PB3 as input, no pull
+    /* Keep floating (NONE): PCB clock-in bias is unknown; pull-down can chatter against an external pull-up.
+     * False slave is prevented by validate-before-follow; echo only blocks F1 forwarding. */
+    gpio_mode_setup(EXT_CLOCK_PORT, GPIO_MODE_INPUT, GPIO_PUPD_NONE, EXT_CLOCK_PIN);
 
     nvic_enable_irq(EXT_CLOCK_NVIC_IRQ);
-    exti_select_source(EXT_CLOCK_EXTI, EXT_CLOCK_PORT); // Map EXTI3 to GPIOB
-    // Trigger on RISING edge only
+    exti_select_source(EXT_CLOCK_EXTI, EXT_CLOCK_PORT);
     exti_set_trigger(EXT_CLOCK_EXTI, EXTI_TRIGGER_RISING);
     exti_enable_request(EXT_CLOCK_EXTI);
 
-    // Reset state
-    last_pulse_time_ms = 0;
-    last_isr_time_ms = 0;
+    last_edge_time_ms = 0;
+    has_last_edge = false;
+    last_in_range_activity_ms = 0;
+    has_in_range_activity = false;
+    last_debounce_time_ms = 0;
+    has_debounce_time = false;
     validated_interval_ms = 0;
+    has_validated_interval = false;
     last_validated_event_time_ms = 0;
     g_ext_clock_validated_interval_ready = false;
+    ext_clock_forwarding_enabled = false;
+    ext_clock_out_of_range_break = false;
+    last_local_f1_ms = 0;
+    has_local_f1 = false;
+    ext_clock_flush_pulse_queue_unlocked();
     reset_ext_clock_validation_buffer();
 }
 
+void ext_clock_note_local_f1_pulse(uint32_t pulse_time_ms) {
+    nvic_disable_irq(EXT_CLOCK_NVIC_IRQ);
+    last_local_f1_ms = pulse_time_ms;
+    has_local_f1 = true;
+    nvic_enable_irq(EXT_CLOCK_NVIC_IRQ);
+}
 
-/**
- * @brief Checks if a new validated external clock interval is ready since the last check.
- *        Clears the flag if it was set.
- *
- * @return true If a new validated interval is ready, false otherwise.
- */
+bool ext_clock_consume_pulse(uint32_t *pulse_time_ms) {
+    bool consumed = false;
+    uint32_t pulse_time = 0;
+
+    nvic_disable_irq(EXT_CLOCK_NVIC_IRQ);
+    if (g_ext_clock_pulse_queue_tail != g_ext_clock_pulse_queue_head) {
+        pulse_time = g_ext_clock_pulse_queue[g_ext_clock_pulse_queue_tail];
+        g_ext_clock_pulse_queue_tail =
+            (uint8_t)((g_ext_clock_pulse_queue_tail + 1u) % EXT_CLOCK_PULSE_QUEUE_LEN);
+        consumed = true;
+    }
+    nvic_enable_irq(EXT_CLOCK_NVIC_IRQ);
+
+    if (consumed && pulse_time_ms != NULL) {
+        *pulse_time_ms = pulse_time;
+    }
+    return consumed;
+}
+
+void ext_clock_flush_pulse_queue(void) {
+    nvic_disable_irq(EXT_CLOCK_NVIC_IRQ);
+    ext_clock_flush_pulse_queue_unlocked();
+    nvic_enable_irq(EXT_CLOCK_NVIC_IRQ);
+}
+
+void ext_clock_set_pulse_forwarding(bool enable) {
+    nvic_disable_irq(EXT_CLOCK_NVIC_IRQ);
+    ext_clock_forwarding_enabled = enable;
+    if (!enable) {
+        ext_clock_flush_pulse_queue_unlocked();
+        ext_clock_out_of_range_break = false;
+    }
+    nvic_enable_irq(EXT_CLOCK_NVIC_IRQ);
+}
+
+void ext_clock_arm_slave_forwarding(void) {
+    nvic_disable_irq(EXT_CLOCK_NVIC_IRQ);
+    ext_clock_flush_pulse_queue_unlocked();
+    ext_clock_forwarding_enabled = true;
+    ext_clock_out_of_range_break = false;
+    nvic_enable_irq(EXT_CLOCK_NVIC_IRQ);
+}
+
+void ext_clock_disarm_slave_forwarding(void) {
+    nvic_disable_irq(EXT_CLOCK_NVIC_IRQ);
+    ext_clock_forwarding_enabled = false;
+    ext_clock_out_of_range_break = false;
+    ext_clock_flush_pulse_queue_unlocked();
+    nvic_enable_irq(EXT_CLOCK_NVIC_IRQ);
+}
+
 bool ext_clock_has_new_validated_interval(void) {
     bool ready;
     nvic_disable_irq(EXT_CLOCK_NVIC_IRQ);
     ready = g_ext_clock_validated_interval_ready;
-    g_ext_clock_validated_interval_ready = false; // Clear the flag atomically
+    g_ext_clock_validated_interval_ready = false;
     nvic_enable_irq(EXT_CLOCK_NVIC_IRQ);
     return ready;
 }
 
-/**
- * @brief Gets the last validated stable interval measured between rising edges.
- *        This interval is only updated when a sequence of stable intervals is detected.
- *
- * @return uint32_t The last validated interval in ms, or 0 if none validated yet or clock timed out.
- */
 uint32_t ext_clock_get_validated_interval(void) {
-    uint32_t interval;
-    // Check for timeout first. If timed out, the validated interval is no longer current.
-    if (ext_clock_has_timed_out(millis())) { // Check timeout against current time
-         return 0; 
-    }
+    uint32_t interval = 0;
     nvic_disable_irq(EXT_CLOCK_NVIC_IRQ);
-    interval = validated_interval_ms;
+    if (has_validated_interval) {
+        interval = validated_interval_ms;
+    }
     nvic_enable_irq(EXT_CLOCK_NVIC_IRQ);
     return interval;
 }
 
-/**
- * @brief Gets the timestamp (in ms) of the rising edge of the external clock pulse
- *        that completed the most recent interval validation.
- *
- * @return uint32_t The timestamp of the validating event, or 0 if no interval
- *                  has been validated yet or if the clock has timed out.
- */
 uint32_t ext_clock_get_last_validated_event_time(void) {
-    uint32_t event_time;
-    if (ext_clock_has_timed_out(millis())) {
-        return 0;
-    }
+    uint32_t event_time = 0;
     nvic_disable_irq(EXT_CLOCK_NVIC_IRQ);
-    event_time = last_validated_event_time_ms;
+    if (has_validated_interval) {
+        event_time = last_validated_event_time_ms;
+    }
     nvic_enable_irq(EXT_CLOCK_NVIC_IRQ);
     return event_time;
 }
 
-
-/**
- * @brief Checks if the external clock has stopped sending pulses (timed out).
- *        Timeout is based on the last *raw* ISR execution time (after debounce),
- *        as this indicates the last known activity.
- *
- * @param current_time_ms The current system time.
- * @return true If the time since the last detected pulse exceeds EXT_CLOCK_TIMEOUT_MS, false otherwise.
- */
-bool ext_clock_has_timed_out(uint32_t current_time_ms) {
+bool ext_clock_has_lost_lock(uint32_t current_time_ms, uint32_t locked_interval_ms) {
     uint32_t last_activity;
+    bool have_activity;
+    bool oor_break;
+
     nvic_disable_irq(EXT_CLOCK_NVIC_IRQ);
-    // Use last_isr_time_ms for timeout, as it reflects the last time we *knew* the clock was active
-    last_activity = last_isr_time_ms;
+    oor_break = ext_clock_out_of_range_break;
+    if (oor_break) {
+        ext_clock_out_of_range_break = false;
+    }
+    have_activity = has_in_range_activity;
+    last_activity = last_in_range_activity_ms;
     nvic_enable_irq(EXT_CLOCK_NVIC_IRQ);
 
-    // Handle potential initial state before any ISR has run
-    if (last_activity == 0) {
-        return true; // Assume timed out if no pulse ever detected
+    if (oor_break) {
+        return true;
     }
 
-    // Use EXT_CLOCK_TIMEOUT_MS from main_constants.h
-    return (current_time_ms > last_activity + EXT_CLOCK_TIMEOUT_MS); 
+    if (!have_activity) {
+        return true;
+    }
+
+    if (locked_interval_ms < MIN_INTERVAL) {
+        locked_interval_ms = MIN_INTERVAL;
+    }
+
+    uint32_t hold_ms = locked_interval_ms + EXT_CLOCK_LOCK_GRACE_MS;
+    return ((uint32_t)(current_time_ms - last_activity) > hold_ms);
 }

@@ -1,0 +1,26 @@
+﻿# KRONO v1.4.1.18
+
+This is a reliability update based on **v1.4.0**. The thirty modes, button behaviour and mode-change flow remain unchanged. Most of the work in this release concerns Clock In handling, along with a small change to the firmware packaging for the online updater.
+
+## Clock In
+
+External clock handling has been revised to make locking and recovery more reliable:
+
+- KRONO now waits for a stable incoming pulse train before locking to an external clock, avoiding unwanted sync from stray pulses.
+- The internal clock keeps running while following an external source. If the incoming clock stops, drifts out of range or the cable is disconnected, KRONO can fall back to its internal tempo almost immediately.
+- When patching 1A or 1B back into Clock In, the firmware now detects its own outgoing pulses and ignores them. This prevents double triggers without interfering with external clocks running at a similar tempo.
+- Tap tempo is disabled only while KRONO is actively following an external clock. It becomes available again as soon as external follow ends. Mode and CV gestures remain available throughout.
+
+## Updating
+
+Use **`krono_code_v1.4.1.18.bin`** (or the `.hex`) with the [Jolin online updater](https://jolin.tech/krono_updater) or your preferred DFU tool.
+
+To enter the bootloader, hold **BOOT** and press **RESET**, as usual.
+
+---
+
+**Firmware packaging**
+
+Build target: PlatformIO `blackpill_f411ce`.
+
+The release package should include the DFU-suffixed `.bin`, `.hex` and `.elf` files. A raw `.bin` can also be provided for STM32CubeProgrammer, but should not be used with the online updater.

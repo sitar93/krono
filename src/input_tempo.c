@@ -67,11 +67,15 @@ static void pattern_reset(void) {
 
 void input_tempo_init(input_tempo_emit_callback_t emit_cb) {
     tempo_emit_cb = emit_cb;
-    input_tempo_reset_calculation();
+    pattern_reset();
+    last_reported_tap_tempo_interval = 0;
 }
 
 void input_tempo_reset_calculation(void) {
     pattern_reset();
+}
+
+void input_tempo_clear_last_reported(void) {
     last_reported_tap_tempo_interval = 0;
 }
 
