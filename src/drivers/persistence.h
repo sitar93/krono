@@ -61,6 +61,7 @@ typedef struct {
     bool gamma_ratchet_double;
     bool gamma_antiratchet_half;
     bool gamma_startstop_muted;
+    uint8_t delta_param[MODE_DELTA_NUM_MODES]; /* modes 31-40: one persisted parameter each */
     uint32_t checksum;           // Simple checksum for validation
 } krono_state_t;
 

@@ -7,6 +7,7 @@
 #include "main_constants.h"
 #include "variables.h"
 #include "status_led.h" // For status_led_set_override
+#include "krono_aux_led_pattern.h" // For krono_aux_led_set_hold
 #include "util/delay.h" // For millis
 #include "modes/modes.h"  // For operational_mode_t
 
@@ -90,10 +91,22 @@ static bool op_mode_omega_threshold_announced = false;
 /** True if user held past OP_MODE_TAP_GAMMA_HOLD_MS (MOD clicks → N+20). */
 static bool op_mode_select_gamma = false;
 static bool op_mode_gamma_threshold_announced = false;
+static bool op_mode_select_delta = false;
+static bool op_mode_delta_threshold_announced = false;
 
 static bool calc_swap_cooldown_ok(uint32_t now) {
     return (last_calc_swap_trigger_time == 0u) ||
            ((now - last_calc_swap_trigger_time) > CALC_SWAP_COOLDOWN_MS);
+}
+
+/**
+ * Op-mode select feedback: status LED (under TAP) stays dark, Aux LED (under MOD) lights while MOD is
+ * physically pressed. Note: on hardware the op-mode SM debounced MOD flag reads true while MOD is
+ * released (verified on unit), so the LED follows the inverted flag. Click counting is left unchanged.
+ */
+static void op_mode_mod_feedback(bool mod_debounced_flag) {
+    status_led_set_override(true, false);
+    krono_aux_led_set_hold(!mod_debounced_flag);
 }
 
 static void reset_op_mode_sm_vars(void) {
@@ -101,6 +114,7 @@ static void reset_op_mode_sm_vars(void) {
     tap_press_start_time = 0;
     op_mode_clicks_count = 0;
     status_led_set_override(false, false); 
+    krono_aux_led_set_hold(false);
     tap_release_time_for_timeout_logic = 0;
     mod_pressed_during_tap_hold_phase = false;
     mode_confirm_state_enter_time = 0;
@@ -116,6 +130,8 @@ static void reset_op_mode_sm_vars(void) {
     op_mode_omega_threshold_announced = false;
     op_mode_select_gamma = false;
     op_mode_gamma_threshold_announced = false;
+    op_mode_select_delta = false;
+    op_mode_delta_threshold_announced = false;
 
     just_exited_op_mode_sm = true;
 }
@@ -238,7 +254,9 @@ static void handle_op_mode_sm(uint32_t now, bool tap_pressed_now, bool mod_is_pr
                 op_mode_omega_threshold_announced = false;
                 op_mode_select_gamma = false;
                 op_mode_gamma_threshold_announced = false;
-                status_led_set_override(true, true); 
+                op_mode_select_delta = false;
+                op_mode_delta_threshold_announced = false;
+                status_led_set_override(true, false);
                 if(aux_led_blink_request_cb) { aux_led_blink_request_cb(); }
                 current_op_mode_sm_state = INPUT_SM_TAP_QUALIFIED_WAITING_RELEASE;
             }
@@ -250,33 +268,35 @@ static void handle_op_mode_sm(uint32_t now, bool tap_pressed_now, bool mod_is_pr
                     reset_op_mode_sm_vars();
                     break;
                 }
-                if (!op_mode_gamma_threshold_announced &&
+                if (!op_mode_delta_threshold_announced &&
+                    (now - tap_press_start_time) >= OP_MODE_TAP_DELTA_HOLD_MS) {
+                    // DELTA tier (31-40): four quick Aux pulses
+                    op_mode_delta_threshold_announced = true;
+                    op_mode_select_delta = true;
+                    op_mode_select_gamma = false;
+                    op_mode_select_omega = false;
+                    krono_aux_led_pattern_start(4, AUX_LED_MULTI_PULSE_ON_MS, AUX_LED_MULTI_PULSE_GAP_MS);
+                } else if (!op_mode_gamma_threshold_announced &&
                     (now - tap_press_start_time) >= OP_MODE_TAP_GAMMA_HOLD_MS) {
                     op_mode_gamma_threshold_announced = true;
                     op_mode_select_gamma = true;
                     op_mode_select_omega = false;
-                    if (gamma_aux_pattern_cb) {
-                        gamma_aux_pattern_cb();
-                    }
+                    // GAMMA tier (21-30): three quick Aux pulses
+                    krono_aux_led_pattern_start(3, AUX_LED_MULTI_PULSE_ON_MS, AUX_LED_MULTI_PULSE_GAP_MS);
                 } else if (!op_mode_omega_threshold_announced &&
                            (now - tap_press_start_time) >= OP_MODE_TAP_OMEGA_HOLD_MS) {
                     op_mode_omega_threshold_announced = true;
                     op_mode_select_omega = true;
-                    if (aux_led_blink_request_cb) {
-                        aux_led_blink_request_cb();
-                    }
+                    // BETA tier (11-20): two quick Aux pulses
+                    krono_aux_led_pattern_start(2, AUX_LED_MULTI_PULSE_ON_MS, AUX_LED_MULTI_PULSE_GAP_MS);
                 }
-                if (mod_button_is_debounced_pressed) {
-                    status_led_set_override(true, false);
-                } else {
-                    status_led_set_override(true, true);
-                }
+                op_mode_mod_feedback(mod_button_is_debounced_pressed);
                 if (mod_button_just_released_debounced) {
                     op_mode_clicks_count++;
                     mod_pressed_during_tap_hold_phase = true;
                 }
             } else { // TAP released
-                status_led_set_override(true, true); 
+                status_led_set_override(true, false);
                 if (mod_pressed_during_tap_hold_phase) { 
                     if (op_mode_clicks_count > 0) {
                         current_op_mode_sm_state = INPUT_SM_AWAITING_CONFIRM_TAP;
@@ -296,11 +316,7 @@ static void handle_op_mode_sm(uint32_t now, bool tap_pressed_now, bool mod_is_pr
             if (mod_button_just_pressed_debounced) {
                 tap_release_time_for_timeout_logic = 0;
             }
-            if (mod_button_is_debounced_pressed) {
-                status_led_set_override(true, false);
-            } else {
-                status_led_set_override(true, true);
-            }
+            op_mode_mod_feedback(mod_button_is_debounced_pressed);
             if (mod_button_just_released_debounced) {
                 op_mode_clicks_count = 1;
                 current_op_mode_sm_state = INPUT_SM_AWAITING_CONFIRM_TAP;
@@ -316,11 +332,7 @@ static void handle_op_mode_sm(uint32_t now, bool tap_pressed_now, bool mod_is_pr
             break;
 
         case INPUT_SM_AWAITING_CONFIRM_TAP: 
-            if (mod_button_is_debounced_pressed) {
-                status_led_set_override(true, false);
-            } else {
-                status_led_set_override(true, true);
-            }
+            op_mode_mod_feedback(mod_button_is_debounced_pressed);
             if (mod_button_just_released_debounced) {
                 op_mode_clicks_count++;
                 mode_confirm_state_enter_time = now;
@@ -331,7 +343,13 @@ static void handle_op_mode_sm(uint32_t now, bool tap_pressed_now, bool mod_is_pr
                     if (op_mode_clicks_count > 0) { 
                         if (aux_led_blink_request_cb) { aux_led_blink_request_cb(); }
                         if (op_mode_change_cb) {
-                            if (op_mode_select_gamma) {
+                            if (op_mode_select_delta) {
+                                uint8_t dn = op_mode_clicks_count;
+                                if (dn > 10) {
+                                    dn = (uint8_t)(((dn - 1u) % 10u) + 1u);
+                                }
+                                op_mode_change_cb((uint8_t)(dn + 30u));
+                            } else if (op_mode_select_gamma) {
                                 uint8_t gn = op_mode_clicks_count;
                                 if (gn > 10) {
                                     gn = (uint8_t)(((gn - 1u) % 10u) + 1u);
@@ -378,7 +396,7 @@ static void input_pins_init(void) {
     ext_clock_init(); 
 
     exti_select_source(EXTI4, GPIOB); 
-    exti_set_trigger(EXTI4, EXTI_TRIGGER_RISING); 
+    exti_set_trigger(EXTI4, EXTI_TRIGGER_FALLING); // Inverted input stage: gate start = PB4 falling
     exti_enable_request(EXTI4); 
     nvic_enable_irq(NVIC_EXTI4_IRQ);
 }
@@ -461,6 +479,11 @@ void input_handler_update(void) {
                     tempo_change_cb(validated_interval, true, event_time, false);
                 }
             }
+            /* Flywheel uses the long-run precise period (sub-ms) so it matches the master. */
+            uint32_t precise_q16 = 0;
+            if (ext_clock_get_precise_period_q16(&precise_q16)) {
+                clock_manager_set_tempo_q16_keep_phase(precise_q16);
+            }
 
             input_tempo_reset_calculation();
 
@@ -495,8 +518,19 @@ void input_handler_update(void) {
                 }
 
                 input_tempo_set_last_reported_interval(new_internal_tempo_to_set);
-                /* Flywheel: keep last valid tempo; phase already advanced by clock_manager. */
-                tempo_change_cb(new_internal_tempo_to_set, false, now, false);
+                /*
+                 * Flywheel: keep the last valid tempo AND the phase of the last external edge (re-anchoring
+                 * to "now" shifted the grid by the detection delay). Prefer the precise period (sub-ms).
+                 */
+                uint32_t precise_q16 = 0;
+                if (session_valid_ext_interval_ms != 0u && ext_clock_get_precise_period_q16(&precise_q16)) {
+                    clock_manager_set_tempo_q16_keep_phase(precise_q16);
+                } else {
+                    clock_manager_set_tempo_q16_keep_phase(new_internal_tempo_to_set << 16);
+                }
+                if (aux_led_blink_request_cb) {
+                    aux_led_blink_request_cb();
+                }
             }
 
             tempo_before_ext_ms = 0;
@@ -508,7 +542,13 @@ void input_handler_update(void) {
     handle_button_calc_mode_swap();
 
     if (!ext_follow_locked) {
-        input_tempo_handle_tap_event();
+        // Aux LED: one blink per accepted tap, double blink when the tempo locks
+        input_tempo_event_t const tev = input_tempo_handle_tap_event();
+        if (tev == INPUT_TEMPO_EVT_LOCKED) {
+            krono_aux_led_pattern_start(2, AUX_LED_MULTI_PULSE_ON_MS, AUX_LED_MULTI_PULSE_GAP_MS);
+        } else if (tev == INPUT_TEMPO_EVT_COUNTED && aux_led_blink_request_cb) {
+            aux_led_blink_request_cb();
+        }
     }
 
     if (ext_gate_swap_requested) {
@@ -540,7 +580,7 @@ void exti4_isr(void) {
     if (exti_get_flag_status(EXTI4)) {
         uint32_t now = millis();
         if (now - last_gate_swap_isr_time >= GATE_SWAP_DEBOUNCE_MS) {
-             if (gpio_get(GPIOB, GPIO4)) { // Check if PB4 (CV gate) is high
+             if (!gpio_get(GPIOB, GPIO4)) { // PB4 low = CV gate high (inverted input stage)
                  /* CV mirrors MOD; allowed while Clock In hard-follow (tap still blocked). */
                  if (current_op_mode_sm_state == INPUT_SM_IDLE) {
                     ext_gate_swap_requested = true;
@@ -550,4 +590,10 @@ void exti4_isr(void) {
         }
         exti_reset_request(EXTI4); 
     }
+}
+
+/** True while the op-mode select state machine is active (after the 1 s TAP hold qualifies). */
+bool input_handler_op_mode_select_active(void) {
+    // Plain tap presses pass through QUALIFYING; only report once the 1 s hold has qualified
+    return current_op_mode_sm_state != INPUT_SM_IDLE && current_op_mode_sm_state != INPUT_SM_TAP_HELD_QUALIFYING;
 }

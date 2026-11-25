@@ -3,3 +3,18 @@
 .vscode/c_cpp_properties.json
 .vscode/launch.json
 .vscode/ipch
+
+# Editor / agent local configuration (keep only the extension recommendation)
+.cursor/
+.vscode/*
+!.vscode/extensions.json
+
+# PlatformIO installer (download it from platformio.org)
+get-platformio.py
+
+# OS and tooling noise
+Thumbs.db
+desktop.ini
+.DS_Store
+*.log
+krono_tap_log_*.json

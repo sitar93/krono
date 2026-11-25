@@ -67,6 +67,9 @@ void mode_state_apply_runtime(operational_mode_t op_mode, const krono_state_t *s
     mode_gamma_ratchet_set_state(state->gamma_ratchet_double);
     mode_gamma_anti_ratchet_set_state(state->gamma_antiratchet_half);
     mode_gamma_start_stop_set_state(state->gamma_startstop_muted);
+    for (uint8_t i = 0; i < MODE_DELTA_NUM_MODES; i++) {
+        mode_delta_set_param(i, state->delta_param[i]);
+    }
 }
 
 void mode_state_capture_for_save(operational_mode_t op_mode,
@@ -133,5 +136,8 @@ void mode_state_capture_for_save(operational_mode_t op_mode,
         mode_gamma_start_stop_get_state(&state_to_save->gamma_startstop_muted);
     } else {
         state_to_save->gamma_startstop_muted = current_state->gamma_startstop_muted;
+    }
+    for (uint8_t i = 0; i < MODE_DELTA_NUM_MODES; i++) {
+        state_to_save->delta_param[i] = mode_delta_get_param(i);
     }
 }

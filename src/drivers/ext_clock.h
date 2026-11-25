@@ -48,6 +48,12 @@ uint32_t ext_clock_get_last_validated_event_time(void);
 bool ext_clock_has_lost_lock(uint32_t current_time_ms, uint32_t locked_interval_ms);
 
 /**
+ * @brief Master period averaged over the last run of consistent edges (up to 64), Q16 milliseconds.
+ *        Survives the cable being pulled (last good value). Returns false until a run of 4 edges exists.
+ */
+bool ext_clock_get_precise_period_q16(uint32_t *period_q16);
+
+/**
  * @brief Mark a locally generated F1 (1A/1B) so near-term PB3 edges skip F1 forwarding only.
  */
 void ext_clock_note_local_f1_pulse(uint32_t pulse_time_ms);

@@ -30,4 +30,7 @@ void input_handler_init(
 void input_handler_update(void);
 void input_handler_update_main_op_mode(operational_mode_t mode);
 
+/** True while the op-mode select state machine is active (after the 1 s TAP hold qualifies). */
+bool input_handler_op_mode_select_active(void);
+
 #endif // INPUT_HANDLER_H

@@ -59,6 +59,36 @@ void mode_dispatch_mod_press(operational_mode_t op, mod_press_event_t ev, uint32
         case MODE_GAMMA_START_STOP:
             mode_gamma_start_stop_on_mod_press(ev, ts_ms);
             break;
+        case MODE_DELTA_TIDES:
+            mode_delta_tides_on_mod_press(ev, ts_ms);
+            break;
+        case MODE_DELTA_ORBIT:
+            mode_delta_orbit_on_mod_press(ev, ts_ms);
+            break;
+        case MODE_DELTA_CHIMERA:
+            mode_delta_chimera_on_mod_press(ev, ts_ms);
+            break;
+        case MODE_DELTA_WANDER:
+            mode_delta_wander_on_mod_press(ev, ts_ms);
+            break;
+        case MODE_DELTA_BUTTERFLY:
+            mode_delta_butterfly_on_mod_press(ev, ts_ms);
+            break;
+        case MODE_DELTA_MONOLITH:
+            mode_delta_monolith_on_mod_press(ev, ts_ms);
+            break;
+        case MODE_DELTA_STATIC:
+            mode_delta_static_on_mod_press(ev, ts_ms);
+            break;
+        case MODE_DELTA_PULSAR:
+            mode_delta_pulsar_on_mod_press(ev, ts_ms);
+            break;
+        case MODE_DELTA_ALLOY:
+            mode_delta_alloy_on_mod_press(ev, ts_ms);
+            break;
+        case MODE_DELTA_ASCENT:
+            mode_delta_ascent_on_mod_press(ev, ts_ms);
+            break;
         default:
             break;
     }

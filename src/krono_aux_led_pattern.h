@@ -14,4 +14,10 @@ void krono_aux_led_pattern_cancel(void);
 bool krono_aux_led_pattern_active(void);
 void krono_aux_led_pattern_pump(uint32_t now_ms);
 
+/**
+ * Hold PA3 on while `on` is true (op-mode select: Aux LED follows MOD). Implemented in main.c.
+ * On release, PA3 goes off unless a soft blink or multi-pulse pattern still owns it.
+ */
+void krono_aux_led_set_hold(bool on);
+
 #endif

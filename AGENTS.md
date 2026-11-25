@@ -68,12 +68,17 @@ src/
 ├── main.c                 # Orchestrator, callbacks, main loop, PA3 soft blink + pattern pump, millis(); save/load glue for mode fields
 ├── main_constants.h       # Timing bounds, shared defines
 ├── variables.h            # Tunable parameters
-├── krono_aux_led_pattern.c/h  # Optional multi-pulse PA3 sequences (future tiers); cooperates with main soft-blink timer
+├── krono_aux_led_pattern.c/h  # Multi-pulse PA3 sequences (tier announcements); cooperates with main soft-blink timer
+├── aux_led.c/h            # PA3 = TIM2_CH4 PWM renderer: event layer > count layer > status (steady / breathe)
+├── aux_led_mode_status.c/h # Per-mode status mapping for the MOD LED
+├── tap_calibration.c/h    # Boot-time tap latency calibration (hold MOD at power-on)
 ├── input_handler.c/h      # Inputs, tap averaging, op-mode SM (+ Omega + Gamma), ext clock, tempo dispatch, short-MOD mode actions (12–30)
 ├── clock_manager.c/h      # F1 pulse, mode_context, mode dispatch
 ├── status_led.c/h
-├── drivers/               # io, tap (incl. tap_abort_capture), ext_clock, persistence, rtc
-├── modes/                 # mode_*.c, modes.c/h, mode_mod_dispatch.c, mode_rhythm_shared.c/h
+├── drivers/               # io, tap, ext_clock, persistence, rtc, analog_out (PWM DAC), audio_gates (1-bit voices),
+│                          #   tap_calib_store (flash sector 6)
+├── modes/                 # mode_*.c, modes.c/h, mode_mod_dispatch.c, mode_rhythm_shared.c/h,
+│                          #   mode_delta.c (31-35), mode_delta_audio.c (36-40), mode_delta_shared.h
 └── util/
 platformio.ini
 ```
@@ -87,7 +92,21 @@ platformio.ini
 3. `main.c` — `on_tap_tempo_change` → `clock_manager_arm_tap_quadruple_boundary()` on tap 4/8/…, else `clock_manager_set_internal_tempo()` (external / fallback).
 4. `clock_manager.c` — schedules F1; passes `mode_context_t` to active `mode_*_update()`.
 
-**Current tap policy (v1.4.0):** Boundaries **4, 8, 12, …** each fire **F1** once and set tempo from the **median** of three gaps (carry-in after a boundary still dropped). **Leading** boundaries (4, 12, …): emit that median. **Trailing** (8, 16, …): if **≤ `TAP_QUAD_BLEND_WINDOW_MS`** (3 s) after the previous leading press, tempo = **(30×leading median + 70×trailing median) / 100** (rounded); else trailing median only. Clicks between boundaries do not retune. **`TAP_PATTERN_IDLE_RESET_MS`** (5 s) resets the pattern. **`clock_manager_arm_tap_quadruple_boundary`** runs in **`clock_manager_update`**.
+**Tap policy (v1.5.0, supersedes the v1.4.0 text below):** `input_tempo.c` fits a least-squares line through
+(beat index, tap time). Tempo = slope over up to `TAP_FIT_MAX_TAPS` (64) taps, phase anchor = last 16
+(`TAP_FIT_PHASE_TAPS`). Lock on tap 4 (`clock_manager_tap_lock`, F1 at the press + calibration offset); later taps
+`clock_manager_tap_refine` (Q16 tempo + soft phase correction `TAP_PHASE_CORR_PCT` per beat in the flywheel).
+Outliers (> `TAP_FIT_OUTLIER_TOL` beat) ignored; two in a row restart; skipped beats allowed; once locked, taps
+after a pause resume the same sequence. Whole-BPM snap within min(2 sigma, `TAP_BPM_SNAP_MAX`). Tap latency offset
+from `tap_calib_store` (flash sector 6, 0x08040000; **firmware must stay below 0x08040000**). Tuned on logged
+sessions with `../krono_tap_lab/krono_tap_lab.html` (browser emulation of this exact algorithm).
+
+**Historical tap policy (v1.4.0):** Boundaries **4, 8, 12, …** each fire **F1** once and set tempo from the **median** of three gaps (carry-in after a boundary still dropped). **Leading** boundaries (4, 12, …): emit that median. **Trailing** (8, 16, …): if **≤ `TAP_QUAD_BLEND_WINDOW_MS`** (3 s) after the previous leading press, tempo = **(30×leading median + 70×trailing median) / 100** (rounded); else trailing median only. Clicks between boundaries do not retune. **`TAP_PATTERN_IDLE_RESET_MS`** (5 s) resets the pattern. **`clock_manager_arm_tap_quadruple_boundary`** runs in **`clock_manager_update`**.
+
+**Clock In edge (v1.5.0):** the input stage (NPN, 10k pull-up) inverts, so PB3 / PB4 EXTI use the FALLING pin
+edge = external rising edge. Precise master period from long runs of consistent edges (`ext_clock_get_precise_period_q16`,
+Q16 ms) feeds `clock_manager_set_tempo_q16_keep_phase`; on lock loss tempo and phase are kept (no re-anchor). An
+edge arriving shortly after a flywheel F1 re-anchors phase without a second F1. Flywheel compares use signed math.
 
 **External clock (v1.4.1.6):** PB3 rising edges are measured while **internal F1 always keeps running** (flywheel). Hard-follow starts only after a **stable triplet** (`max−min ≤ max(EXT_CLOCK_STABILITY_ABS_MS, min×5%)`). Edges within `EXT_CLOCK_ECHO_WINDOW_MS` of a local F1 are still measured for validation/lock but **not** queued for F1 forwarding (autopatch must not double-F1; must not drop real masters near our tempo). On first lock: save `tempo_before_ext_ms`, `clock_manager_begin_external_slave()` (flush queue, arm forwarding, one F1 on validating edge; mode update deferred). While following, in-range non-echo edges snap F1; out-of-range edges break follow immediately. Lock loss: no non-echo in-range edge within `(locked_interval + EXT_CLOCK_LOCK_GRACE_MS)` → end follow and keep session tempo on the flywheel (no multi-second mute). Tap is ignored only while hard-following. Unfollow restore priority: **session** validated interval → `tempo_before_ext_ms` → `DEFAULT_TEMPO_INTERVAL`. PB3 stays `GPIO_PUPD_NONE`; never reclaim **PA13/PA14** (SWD). Free **PA15/PB3/PB4** once in `io_init` via `io_release_jtag_only_pins()` (**v1.4.1.4/1.5** — do not re-run after EXTI arm). **v1.4.1.3+:** queued edges use per-edge timestamps; wall-clock mode update while following; pulses retrigger.
 
@@ -140,6 +159,25 @@ Mode-family selection reuses the **same** op-mode change state machine as modes 
   - `MODE_ACCUMULATE`: automatic accumulation with drastic reset at max; each new activation applies slight random loop variation on that output; MOD toggles freeze/unfreeze.
 
 ---
+
+### DELTA tier (31-40)
+
+- Entry: TAP hold `OP_MODE_TAP_DELTA_HOLD_MS` (4 s) → 4 Aux pulses; confirm N+30. Abort at `OP_MODE_TAP_OMEGA_MAX_HOLD_MS` (6 s).
+- `drivers/analog_out.c`: TIM1 CH2N/CH3N/CH1N (1A/2A/2B), 84 MHz / 12 = 7 MHz PWM, DMA burst (DCR/DMAR, DMA2 S5 ch6) of
+  per-period dithered CCR values; measured duty→voltage table `AO_CAL_DUTY` at 93 % amplitude (0..~8.4 V). 3A = TIM5_CH3
+  with CCR fed by DMA1 S6 ch2 paced by TIM4 (CV only). Audio streaming: HT/TC interrupt renders 8 samples per half
+  (~36.5 kHz), 32x expansion, RCR 5. 1A and 1B can never both be analog (same TIM1 CH2N).
+- `drivers/audio_gates.c`: TIM4 40 kHz ISR, 10 one-bit voices (square with pulse width, LFSR noise, logic, high).
+- Persistence: `krono_state_t.delta_param[10]`. Audio modes silence for 2 s on entry and before every flash save
+  (`mode_delta_audio_hold`) because IRQs are masked while saving.
+- LFO modes clocks: 1B base, 3B counter-phase; automation gates on 4A 5A 6A 4B 5B 6B.
+
+### MOD LED (PA3) and inputs
+
+- PA3 is TIM2_CH4 PWM (`aux_led.c`); `set_output(JACK_OUT_AUX_LED_PA3, x)` drives its event layer. Status per mode in
+  `aux_led_mode_status.c` (steady = freeze / B bank, breathe = modulation, looping count = enumerated state).
+- MOD button electrically reads HIGH when pressed on this PCB (the op-mode SM's debounced flag is inverted; see
+  `op_mode_mod_feedback` and `tap_calibration.c`). Do not "fix" one side without the other.
 
 ## Important implementation notes
 
@@ -204,7 +242,30 @@ Use **Tasks: Run Task** for `PlatformIO: Build/Upload/Clean` if defined in `.vsc
 
 ---
 
+## Clock In change checklist
+
+Before merging any edit to `ext_clock.*`, `clock_manager.*` (F1 / slave) or the `input_handler` external-lock path,
+re-read those files and answer:
+
+1. **Slow / normal external master (~40-120 BPM):** do rising edges still enter validation (interval buffer + ready
+   flag), not only forwarding? The echo window must **not** `return` early before measuring / holding the lock.
+2. **Fast external master:** still validates; out-of-range still breaks follow without a multi-second mute.
+3. **Tap tempo:** ignored only while hard-following; works again immediately after lock loss / unfollow.
+4. **Autopatch 1A/1B → Clock In:** the internal flywheel keeps running; echoes may skip **forwarding** only;
+   1A/1B must not go silent.
+5. **Hard-follow:** in-range non-echo edges still queue → `apply_external_pulse`; the flywheel covers a missed beat.
+6. **Lock loss:** one missed period (+ grace) or out-of-range, not `EXT_CLOCK_TIMEOUT_MS` (~15 s) as the normal path.
+7. **Edge polarity:** PB3 / PB4 trigger on the pin FALLING edge (inverting input stage) = external rising edge.
+
+If any answer is "no" or "unclear", fix before release.
+
 ## Release build notes
+
+- **Primary `krono_code_<ver>.bin` = PlatformIO's DFU-suffixed `firmware.bin`, renamed only** (16-byte DFU suffix,
+  tail signature `UFD`), exactly as since v1.4.0: required by https://jolin.tech/krono_updater. Never strip the suffix,
+  never 0xFF-pad to a sector, never replace it with a raw `objcopy` image (that soft-bricked units). A raw
+  `krono_code_<ver>_raw.bin` may be shipped for STM32CubeProgrammer only. Quick check: a good online `.bin` ends with
+  `UFD` + length 16 and its size = image + 16.
 
 - Prefer a clean build before release: `clean` then `run`.
 - Artifacts under `.pio/build/blackpill_f411ce/` (including renamed `krono_code_v*.*.*.{bin,elf,hex}` from post-build scripts).

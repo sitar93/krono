@@ -1,0 +1,74 @@
+# KRONO v1.5.0
+
+This update adds a whole new tier of ten self-evolving modes, gives the MOD LED a lot more to say, makes tap tempo far more precise, and fixes how KRONO follows square-wave clocks. All of it runs on the existing hardware: no modifications needed.
+
+## A little unexpected discovery: LFOs and audio
+
+KRONO has no DAC and was never designed to produce analogue signals. While teaching the MOD LED to breathe, we realised the same technique could reach some of the outputs: by switching them millions of times per second, the existing output stage smooths the pulses into real, continuous voltages.
+
+So outputs **1A**, **2A** and **2B** (and **3A** for modulation) can now produce smooth waveforms from slow LFOs up to audio rate, with a characterful lo-fi sound when used as oscillators. The signals are unipolar, from 0 to about 8 V.
+
+## New DELTA tier (modes 31-40)
+
+Hold **TAP** for about **4 seconds** (the MOD LED flashes 4 times), release, click **MOD** 1-10 times and confirm with **TAP**.
+
+All DELTA modes evolve on their own over time, locked to the tempo. In every DELTA mode **1B** is the base clock and **3B** is a counter-phase clock (on the half beat). MOD selects the variant in the last column, and your choice is saved.
+
+| Mode | Info | MOD |
+|---|---|---|
+| **31 TIDES** | 4 tempo-synced LFOs (1A: 1 beat, 2A: 4, 2B: 16, 3A: 2). The waveform slowly morphs into the next one. Gates on cycle starts and peaks | waveform |
+| **32 ORBIT** | One sine at 4 phases (1A, 2A, 2B, 3A) rotating across the outputs. Direction reverses and speed drifts | rotation length |
+| **33 CHIMERA** | Morphing wavetables (3A = morph position). The bank changes every 8 bars | bank |
+| **34 WANDER** | Random voltages at different rates. Range and change probability evolve | smooth / stepped / slewed |
+| **35 BUTTERFLY** | Lorenz attractor (x, y, z, speed). Drifts between calm and chaotic phases | speed |
+| **36 MONOLITH** | Modal drone with a slow chord progression and very slow glides. Analog voices morph sine → saw → triangle and breathe; pulse voices with slow PWM swell in and out | progression on / frozen |
+| **37 STATIC** | Noise and crackle that change colour and density | rain / wind / radio / geiger |
+| **38 PULSAR** | Drum machine (analog kick, zap and tom, plus 1-bit hats, snare and blips). Patterns mutate, with fills | techno / broken / half-time / glitch |
+| **39 ALLOY** | Two oscillators with sum, ring mod and logic combinations. The interval glides over time | evolution speed |
+| **40 ASCENT** | Arpeggiator that mutates notes and progression, with rests and ratchets | scale |
+
+In the audio modes (36-40) the pitch follows the tempo: change the tempo and the whole mode transposes. Patch the audio outputs into AC-coupled inputs (or attenuate them), as they are hot unipolar signals. Audio modes stay silent for 2 seconds after a mode change or a save, so switching is clean.
+
+## The MOD LED now tells you more
+
+The LED under MOD shows the state of the current mode:
+
+- **Steady on**: a freeze, stop or "B" bank is active (for example A/B swap in modes 1-8, freeze in 16, 20 and 22, mute in 30).
+- **Breathing**: the mode is continuously evolving or modulating; the stronger the modulation, the deeper the breath.
+- **Repeating blinks**: the selected bank, pattern or profile number (for example the bank in mode 11 or the pattern in mode 23), repeated every 2 seconds.
+
+It still flashes on taps, parameter changes and saves. In modes where it is steady on, the flash becomes a short off-blink so you can always see it.
+
+**Mode selection is clearer too.** The Fast-Skip tiers now flash 1, 2, 3 and 4 times (ALPHA, BETA, OMEGA, DELTA). While selecting, the MOD LED lights with each MOD click, and on confirm both LEDs stay lit while the selection is saved.
+
+The **status LED** (under TAP) still shows the active mode: short blinks for units, long blinks for tens. For example, mode 2 is 2 short blinks, mode 12 is 1 long and 2 short, mode 30 is 3 long, and mode 40 is 4 long.
+
+## Precise tap tempo
+
+Tap tempo has been rebuilt to follow you musically:
+
+- **Tap 4 times** and the tempo locks, starting right on your 4th tap.
+- **Keep tapping** and every tap refines the tempo, with no jumps in the rhythm. After 16-32 taps KRONO stays in time with the music for a long time, even after you stop.
+- **Back in phase:** if it slowly drifts away, tap a few times along with the beat; it realigns smoothly, even after a long pause.
+- **Mistakes are forgiven:** a stray tap is ignored and skipped beats are counted correctly.
+- **Round tempos:** when your taps are very close to a whole BPM value (120, 128…), KRONO settles exactly on it.
+
+### Optional: tap latency calibration
+
+Most people tap slightly ahead of the beat they hear. KRONO can now measure your personal timing and compensate for it. Hold **MOD** while powering on until the two LEDs blink alternately, release, then tap 16 times along with the 100 BPM click on 1A. Patching 1A into a sound and tapping to what you hear works best. Both LEDs flash twice when it is done; press MOD to cancel. The result is kept across power cycles and future firmware updates. A new KRONO works perfectly well without it.
+
+## Better external clock
+
+- **Square-wave clocks are now followed on the beat.** KRONO used to react to the *end* of each incoming pulse: with short triggers nobody noticed, but with square-wave clocks the outputs ended up half a beat late. It now reacts to the start of the pulse, and the same fix applies to the MOD input, which now reacts as soon as a gate starts.
+- When you unplug the clock, KRONO keeps both the tempo and the phase it was following, measured precisely over many beats, so it stays in time instead of drifting.
+- Small timing differences between KRONO and a slightly slower master no longer cause occasional double hits.
+
+## Updating
+
+Use **`krono_code_v1.5.0.bin`** (or the `.hex`) with the [Jolin online updater](https://jolin.tech/krono_updater) or your preferred DFU tool. To enter the bootloader, hold **BOOT** and press **RESET**, as usual.
+
+**Note:** this version stores more settings than before, so after updating, the saved tempo, mode and mode parameters go back to their defaults once.
+
+---
+
+**Firmware packaging** — build target PlatformIO `blackpill_f411ce`. The release includes the DFU-suffixed `.bin` (for the online updater), `.hex` and `.elf`; `*_raw.bin` is for STM32CubeProgrammer only.

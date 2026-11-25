@@ -45,7 +45,17 @@ static void (*mode_reset_functions[NUM_OPERATIONAL_MODES])(void) = {
     mode_gamma_coin_toss_reset,
     mode_gamma_ratchet_reset,
     mode_gamma_anti_ratchet_reset,
-    mode_gamma_start_stop_reset
+    mode_gamma_start_stop_reset,
+    mode_delta_tides_reset,
+    mode_delta_orbit_reset,
+    mode_delta_chimera_reset,
+    mode_delta_wander_reset,
+    mode_delta_butterfly_reset,
+    mode_delta_monolith_reset,
+    mode_delta_static_reset,
+    mode_delta_pulsar_reset,
+    mode_delta_alloy_reset,
+    mode_delta_ascent_reset
 };
 
 // Function pointer table for mode init functions
@@ -79,7 +89,17 @@ static void (*mode_init_functions[NUM_OPERATIONAL_MODES])(void) = {
     mode_gamma_coin_toss_init,
     mode_gamma_ratchet_init,
     mode_gamma_anti_ratchet_init,
-    mode_gamma_start_stop_init
+    mode_gamma_start_stop_init,
+    mode_delta_tides_init,
+    mode_delta_orbit_init,
+    mode_delta_chimera_init,
+    mode_delta_wander_init,
+    mode_delta_butterfly_init,
+    mode_delta_monolith_init,
+    mode_delta_static_init,
+    mode_delta_pulsar_init,
+    mode_delta_alloy_init,
+    mode_delta_ascent_init
 };
 
 

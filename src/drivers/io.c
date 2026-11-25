@@ -1,6 +1,7 @@
 #include "io.h"
 #include "tap.h" // Needed for tap_detected() wrapper
 #include "../main_constants.h" // Needed for millis() declaration and JACK_... enums
+#include "../aux_led.h" // PA3 routed to the Aux LED PWM renderer
 #include <libopencm3/stm32/rcc.h>
 #include <libopencm3/stm32/gpio.h>
 #include <libopencm3/stm32/timer.h> // Added for TIM3
@@ -216,6 +217,12 @@ void set_output(jack_output_t jack, bool state) {
                              (jack == JACK_OUT_AUX_LED_PA3);
 
     if (!is_active_output) return;
+
+    // Aux LED is a TIM2 PWM output (aux_led.c); on/off here is its full-brightness event layer
+    if (jack == JACK_OUT_AUX_LED_PA3) {
+        aux_led_set_event(state);
+        return;
+    }
 
     if (state) { gpio_set(jack_output_map[jack].port, jack_output_map[jack].pin); }
     else { gpio_clear(jack_output_map[jack].port, jack_output_map[jack].pin); }

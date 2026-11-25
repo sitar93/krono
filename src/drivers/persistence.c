@@ -63,6 +63,7 @@ static krono_state_t get_default_krono_state(void) {
     default_state.gamma_ratchet_double = false;
     default_state.gamma_antiratchet_half = false;
     default_state.gamma_startstop_muted = false;
+    memset(default_state.delta_param, 0, sizeof default_state.delta_param);
 
     default_state.checksum = 0; // Checksum must be calculated last over a zeroed checksum field
     default_state.checksum = persistence_calculate_checksum(&default_state);

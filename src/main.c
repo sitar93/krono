@@ -21,6 +21,11 @@
 #include "main_constants.h"
 #include "mode_state.h"
 #include "krono_aux_led_pattern.h"
+#include "aux_led.h"
+#include "aux_led_mode_status.h"
+#include "drivers/analog_out.h"
+#include "drivers/tap_calib_store.h"
+#include "tap_calibration.h"
 
 #include "modes/mode_fixed.h"
 
@@ -29,6 +34,7 @@ krono_state_t current_state;
 static volatile operational_mode_t g_current_op_mode = MODE_DEFAULT;
 static volatile calculation_mode_t g_current_calc_mode = CALC_MODE_NORMAL;
 static volatile bool state_changed_for_saving = false;
+static bool mode_confirm_led_pending = false; // Light both LEDs during the save that follows a mode confirm
 static uint32_t last_save_time = 0;
 
 // --- Status LED (PA3) Blink Timer ---
@@ -43,6 +49,35 @@ static void pa3_soft_blink_arm(void) {
     krono_aux_led_pattern_cancel();
     set_output(JACK_OUT_AUX_LED_PA3, true);
     status_led_pa3_blink_end_time = millis() + STATUS_LED_PA3_BLINK_DURATION_MS;
+}
+
+/**
+ * Aux LED feedback after a MOD/CV action: enumerated states show a count (long = tens, short = units),
+ * everything else keeps the single soft blink. Breathing / level status follows automatically.
+ */
+static void aux_mod_action_feedback(void) {
+    aux_led_status_t st;
+    aux_led_mode_status_get(g_current_op_mode, g_current_calc_mode, &st);
+    if (st.kind == AUX_LED_STATUS_COUNT) {
+        aux_led_request_count();
+    } else {
+        pa3_soft_blink_arm();
+    }
+}
+
+// --- PA3 hold (op-mode select: Aux LED follows MOD) ---
+static bool pa3_hold_active = false;
+
+void krono_aux_led_set_hold(bool on) {
+    if (on == pa3_hold_active) {
+        return;
+    }
+    pa3_hold_active = on;
+    if (on) {
+        set_output(JACK_OUT_AUX_LED_PA3, true);
+    } else if (!krono_aux_led_pattern_active() && status_led_pa3_blink_end_time == 0) {
+        set_output(JACK_OUT_AUX_LED_PA3, false);
+    }
 }
 
 // --- SysTick ---
@@ -115,9 +150,11 @@ static void on_op_mode_change(uint8_t mode_clicks) {
         status_led_set_mode(g_current_op_mode); 
         status_led_reset(); 
 
+        aux_led_cancel_count();
         pa3_soft_blink_arm();
-        
-        state_changed_for_saving = true; 
+
+        mode_confirm_led_pending = true;
+        state_changed_for_saving = true;
     }
 }
 
@@ -134,7 +171,7 @@ static void on_calc_mode_change(void) {
      }
 #endif
 
-    pa3_soft_blink_arm();
+    aux_mod_action_feedback();
 }
 
 static void on_fixed_bank_change(void) {
@@ -146,7 +183,7 @@ static void on_fixed_bank_change(void) {
         mode_fixed_set_bank(next_bank);
         current_state.fixed_bank = next_bank;
         
-        pa3_soft_blink_arm();
+        aux_mod_action_feedback();
     }
 }
 
@@ -165,7 +202,7 @@ static void on_gamma_arm_aux_pattern_from_input_handler(void) {
 static void on_mod_press(mod_press_event_t event, uint32_t timestamp_ms) {
     (void)event;
     mode_dispatch_mod_press(g_current_op_mode, MOD_PRESS_EVENT_SINGLE, timestamp_ms);
-    pa3_soft_blink_arm();
+    aux_mod_action_feedback();
 }
 
 // --- Pin Configuration ---
@@ -197,7 +234,10 @@ static void system_init(void) {
     systick_counter_enable();
     configure_unused_pins();
     io_init();
+    aux_led_init(); // PA3 -> TIM2_CH4 PWM (after io_init configured it as GPIO)
     pulse_timer_init();
+    tap_calib_load();
+    tap_calibration_check_boot(); // Hold MOD at power-on: personal tap latency calibration
     persistence_init();
 
     if (persistence_load_state(&current_state)) {
@@ -309,13 +349,14 @@ int main(void) {
     while (1) {
         uint32_t now = millis();
         if (tap_check_timeout(now)) {
-            input_tempo_reset_calculation();
+            input_tempo_on_tap_timeout();
         }
         input_handler_update();
         clock_manager_update(); 
         status_led_update(now); 
 
         krono_aux_led_pattern_pump(now);
+        analog_out_update(now);
 
         if (!krono_aux_led_pattern_active()
             && status_led_pa3_blink_end_time != 0
@@ -323,12 +364,39 @@ int main(void) {
             set_output(JACK_OUT_AUX_LED_PA3, false);
             status_led_pa3_blink_end_time = 0;
         }
+        if (pa3_hold_active) {
+            set_output(JACK_OUT_AUX_LED_PA3, true);
+        }
+
+        // Aux LED status layer (breathing / level / count); event flashes above take priority
+        aux_led_status_t aux_status;
+        aux_led_mode_status_get(g_current_op_mode, g_current_calc_mode, &aux_status);
+        aux_led_update(now, &aux_status, input_handler_op_mode_select_active());
 
         
         if (state_changed_for_saving) {
             if (now - last_save_time > SAVE_STATE_COOLDOWN_MS) {
-                save_current_state(); 
+                bool const confirm_feedback = mode_confirm_led_pending;
+                if (confirm_feedback) {
+                    // Mode confirmed: both LEDs stay lit for the (blocking) flash save
+                    set_output(JACK_OUT_STATUS_LED_PA15, true);
+                    aux_led_force_on(true);
+                }
+                mode_delta_audio_hold(now); // Silence audio modes: IRQs are masked during the flash save
+                save_current_state();
                 last_save_time = now;
+                if (confirm_feedback) {
+                    // millis() is frozen while IRQs are masked during the save, so end the PA3 soft blink
+                    // here too; otherwise PA3 lingers ~100 ms after PA15 goes dark.
+                    mode_confirm_led_pending = false;
+                    krono_aux_led_pattern_cancel();
+                    status_led_pa3_blink_end_time = 0;
+                    aux_led_force_on(false);
+                    if (!pa3_hold_active) {
+                        set_output(JACK_OUT_AUX_LED_PA3, false);
+                    }
+                    status_led_reset();
+                }
             }
         }
     }

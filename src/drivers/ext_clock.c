@@ -46,6 +46,18 @@ static volatile uint8_t g_ext_clock_pulse_queue_tail = 0;
 static uint32_t ext_intervals[NUM_EXT_INTERVALS_FOR_VALIDATION] = {0};
 static uint8_t ext_interval_index = 0;
 
+/*
+ * Precise period: average over a run of consecutive consistent edges (up to EXT_CLOCK_RUN_MAX intervals),
+ * in Q16 milliseconds. The 3-interval validation is rounded to 1 ms, which makes the flywheel drift once the
+ * cable is pulled; a long run resolves the period to a few hundredths of a millisecond.
+ */
+#define EXT_CLOCK_RUN_MIN 4u
+#define EXT_CLOCK_RUN_MAX 64u
+static volatile uint32_t run_start_ms = 0;
+static volatile uint32_t run_count = 0; // intervals in the current run
+static volatile uint32_t precise_period_q16 = 0;
+static volatile bool has_precise_period = false;
+
 static void ext_clock_queue_pulse_unlocked(uint32_t pulse_time_ms) {
     uint8_t next_head = (uint8_t)((g_ext_clock_pulse_queue_head + 1u) % EXT_CLOCK_PULSE_QUEUE_LEN);
     if (next_head == g_ext_clock_pulse_queue_tail) {
@@ -91,8 +103,8 @@ void exti3_isr(void) {
 }
 
 /**
- * @brief Rising-edge EXTI handler. Debounce, measure intervals, validate, optional F1 queue.
- *        EXTI rising is authoritative — pin may already be LOW when the ISR runs.
+ * @brief External rising-edge handler (PB3 falling, inverted input stage). Debounce, measure intervals,
+ *        validate, optional F1 queue. The EXTI edge is authoritative - the pin level is not re-checked.
  */
 void ext_clock_handle_irq(void) {
     uint32_t now = millis();
@@ -120,6 +132,29 @@ void ext_clock_handle_irq(void) {
 
             if (ext_clock_forwarding_enabled && !is_echo) {
                 ext_clock_queue_pulse_unlocked(now);
+            }
+
+            // Precise period run: restart if this interval disagrees with the run average (tempo change)
+            if (run_count == 0u) {
+                run_start_ms = last_edge_time_ms;
+                run_count = 1u;
+            } else {
+                uint32_t const avg = (now - run_start_ms) / (run_count + 1u);
+                uint32_t const diff = (interval > avg) ? (interval - avg) : (avg - interval);
+                if (diff > stability_tolerance_ms(avg)) {
+                    run_start_ms = last_edge_time_ms;
+                    run_count = 1u;
+                } else {
+                    run_count++;
+                    if (run_count >= EXT_CLOCK_RUN_MAX) { // Slide: keep the newest half
+                        run_start_ms += (now - run_start_ms) / 2u;
+                        run_count /= 2u;
+                    }
+                }
+            }
+            if (run_count >= EXT_CLOCK_RUN_MIN) {
+                precise_period_q16 = (uint32_t)((((uint64_t)(now - run_start_ms)) << 16) / run_count);
+                has_precise_period = true;
             }
 
             ext_intervals[ext_interval_index++] = interval;
@@ -158,6 +193,7 @@ void ext_clock_handle_irq(void) {
         } else {
             /* Out of range: break hard-follow immediately; do not refresh lock activity. */
             reset_ext_clock_validation_buffer();
+            run_count = 0u; // Keep the last precise period for the flywheel
             if (ext_clock_forwarding_enabled) {
                 ext_clock_out_of_range_break = true;
             }
@@ -178,7 +214,9 @@ void ext_clock_init(void) {
 
     nvic_enable_irq(EXT_CLOCK_NVIC_IRQ);
     exti_select_source(EXT_CLOCK_EXTI, EXT_CLOCK_PORT);
-    exti_set_trigger(EXT_CLOCK_EXTI, EXTI_TRIGGER_RISING);
+    /* The input stage (NPN, 10k pull-up) inverts: the external rising edge is the PB3 FALLING edge.
+     * Triggering on PB3 rising followed the END of each external pulse (half a period late on square clocks). */
+    exti_set_trigger(EXT_CLOCK_EXTI, EXTI_TRIGGER_FALLING);
     exti_enable_request(EXT_CLOCK_EXTI);
 
     last_edge_time_ms = 0;
@@ -195,6 +233,8 @@ void ext_clock_init(void) {
     ext_clock_out_of_range_break = false;
     last_local_f1_ms = 0;
     has_local_f1 = false;
+    run_count = 0u;
+    has_precise_period = false;
     ext_clock_flush_pulse_queue_unlocked();
     reset_ext_clock_validation_buffer();
 }
@@ -284,6 +324,19 @@ uint32_t ext_clock_get_last_validated_event_time(void) {
     }
     nvic_enable_irq(EXT_CLOCK_NVIC_IRQ);
     return event_time;
+}
+
+bool ext_clock_get_precise_period_q16(uint32_t *period_q16) {
+    bool ok;
+    uint32_t p;
+    nvic_disable_irq(EXT_CLOCK_NVIC_IRQ);
+    ok = has_precise_period;
+    p = precise_period_q16;
+    nvic_enable_irq(EXT_CLOCK_NVIC_IRQ);
+    if (ok && period_q16 != NULL) {
+        *period_q16 = p;
+    }
+    return ok;
 }
 
 bool ext_clock_has_lost_lock(uint32_t current_time_ms, uint32_t locked_interval_ms) {

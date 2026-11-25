@@ -26,6 +26,21 @@ void clock_manager_init(operational_mode_t initial_op_mode, uint32_t initial_tem
 void clock_manager_set_internal_tempo(uint32_t interval_ms, bool is_external_clock, uint32_t event_timestamp_ms);
 
 /**
+ * @brief Set the tempo with sub-millisecond precision (Q16 ms) without touching the beat phase.
+ *        Used for the precise external-clock period, while following and after the cable is pulled.
+ */
+void clock_manager_set_tempo_q16_keep_phase(uint32_t interval_q16);
+
+/** Tap tempo lock: tempo (Q16 ms) applied and F1 fired at the press (anchor_ms). Ignored while slaved. */
+void clock_manager_tap_lock(uint32_t interval_q16, uint32_t anchor_ms);
+
+/**
+ * Tap tempo refinement: new tempo (Q16 ms) and a soft phase correction toward anchor_ms (the fitted tap time),
+ * spread over the next beats (no jumps, no doubled / missing beats). Ignored while slaved.
+ */
+void clock_manager_tap_refine(uint32_t interval_q16, uint32_t anchor_ms);
+
+/**
  * @brief Arm F1 pulse + tempo on the next clock_manager_update (tap quadruple boundary).
  *        Ensures mode update sees f1_rising_edge in the same frame as the 1A/1B pulse.
  */

@@ -30,6 +30,12 @@ static uint32_t f1_tick_counter = 0; // Counter for mode context
 static bool sync_requested = false; // Flag for mode sync
 static bool calc_mode_just_changed = false; // Flag for mode calc switch
 static bool external_clock_slaved = false;
+static uint32_t tempo_frac_q16 = 0;   // Fractional part of the tempo interval (Q16 ms)
+static uint32_t tempo_frac_acc = 0;   // Flywheel accumulator for the fractional part
+static bool last_f1_from_flywheel = false;
+static uint32_t last_f1_emit_ms = 0;  // When the last F1 pulse was actually emitted
+static int32_t tap_phase_corr_ms = 0; // Pending soft phase correction from tap refinement (ms)
+static uint32_t pending_tap_frac_q16 = 0;
 
 static bool pending_tap_quadruple_boundary = false;
 static uint32_t pending_tap_quadruple_interval_ms = 0;
@@ -79,7 +85,17 @@ static void (*mode_update_functions[NUM_OPERATIONAL_MODES])(const mode_context_t
     [MODE_GAMMA_COIN_TOSS] = mode_gamma_coin_toss_update,
     [MODE_GAMMA_RATCHET] = mode_gamma_ratchet_update,
     [MODE_GAMMA_ANTI_RATCHET] = mode_gamma_anti_ratchet_update,
-    [MODE_GAMMA_START_STOP] = mode_gamma_start_stop_update
+    [MODE_GAMMA_START_STOP] = mode_gamma_start_stop_update,
+    [MODE_DELTA_TIDES] = mode_delta_tides_update,
+    [MODE_DELTA_ORBIT] = mode_delta_orbit_update,
+    [MODE_DELTA_CHIMERA] = mode_delta_chimera_update,
+    [MODE_DELTA_WANDER] = mode_delta_wander_update,
+    [MODE_DELTA_BUTTERFLY] = mode_delta_butterfly_update,
+    [MODE_DELTA_MONOLITH] = mode_delta_monolith_update,
+    [MODE_DELTA_STATIC] = mode_delta_static_update,
+    [MODE_DELTA_PULSAR] = mode_delta_pulsar_update,
+    [MODE_DELTA_ALLOY] = mode_delta_alloy_update,
+    [MODE_DELTA_ASCENT] = mode_delta_ascent_update
 };
 
 static uint32_t snap_phase_to_grid(uint32_t t0, uint32_t now, uint32_t interval_ms) {
@@ -121,8 +137,21 @@ static void apply_external_pulse(uint32_t edge_ms) {
         t = now;
     }
     last_f1_pulse_time_ms = t;
+    tempo_frac_acc = 0;
+    tap_phase_corr_ms = 0;
     generate_f1_pulse();
     f1_tick_counter++;
+    last_f1_from_flywheel = false;
+    last_f1_emit_ms = t;
+}
+
+/** True when an external edge lands shortly after a flywheel F1 of the same beat (master slightly slower). */
+static bool edge_is_late_for_flywheel_beat(uint32_t edge_ms) {
+    if (!last_f1_from_flywheel) {
+        return false;
+    }
+    uint32_t const since = edge_ms - last_f1_emit_ms;
+    return since < (active_tempo_interval_ms / 2u);
 }
 
 // --- Public Function Implementations ---
@@ -166,6 +195,8 @@ void clock_manager_begin_external_slave(uint32_t interval_ms, uint32_t validatin
     }
 
     active_tempo_interval_ms = interval_ms;
+    tempo_frac_q16 = 0;
+    tap_phase_corr_ms = 0;
 
     /*
      * Hard-follow Clock In: arm edge→F1 forwarding for subsequent non-echo edges.
@@ -194,6 +225,7 @@ void clock_manager_set_internal_tempo(uint32_t interval_ms, bool is_external_clo
             t0 = now;
         }
         active_tempo_interval_ms = interval_ms;
+        tempo_frac_q16 = 0;
 
         if (external_clock_slaved) {
             /* Follow mode: accept tempo updates; phase stays on last ext/internal F1. */
@@ -206,6 +238,45 @@ void clock_manager_set_internal_tempo(uint32_t interval_ms, bool is_external_clo
          */
         last_f1_pulse_time_ms = snap_phase_to_grid(t0, now, interval_ms);
     }
+}
+
+void clock_manager_tap_lock(uint32_t interval_q16, uint32_t anchor_ms) {
+    uint32_t const ms = interval_q16 >> 16;
+    if (external_clock_slaved || ms < MIN_INTERVAL || ms > MAX_INTERVAL) {
+        return;
+    }
+    pending_tap_quadruple_boundary = true;
+    pending_tap_quadruple_interval_ms = ms;
+    pending_tap_quadruple_t0_ms = anchor_ms;
+    pending_tap_frac_q16 = interval_q16 & 0xFFFFu;
+}
+
+void clock_manager_tap_refine(uint32_t interval_q16, uint32_t anchor_ms) {
+    uint32_t const ms = interval_q16 >> 16;
+    if (external_clock_slaved || ms < MIN_INTERVAL || ms > MAX_INTERVAL) {
+        return;
+    }
+    active_tempo_interval_ms = ms;
+    tempo_frac_q16 = interval_q16 & 0xFFFFu;
+    // Phase error of the fitted tap vs the nearest beat of the running grid
+    int32_t d = (int32_t)(anchor_ms - last_f1_pulse_time_ms);
+    int32_t const half = (int32_t)(ms / 2u);
+    while (d > half) {
+        d -= (int32_t)ms;
+    }
+    while (d < -half) {
+        d += (int32_t)ms;
+    }
+    tap_phase_corr_ms = d; // Positive: taps are later than the beats -> delay the grid
+}
+
+void clock_manager_set_tempo_q16_keep_phase(uint32_t interval_q16) {
+    uint32_t const ms = interval_q16 >> 16;
+    if (ms < MIN_INTERVAL || ms > MAX_INTERVAL) {
+        return;
+    }
+    active_tempo_interval_ms = ms;
+    tempo_frac_q16 = interval_q16 & 0xFFFFu;
 }
 
 uint32_t clock_manager_get_current_tempo_interval(void) {
@@ -246,6 +317,13 @@ void clock_manager_update(void) {
             if (t > now) {
                 t = now;
             }
+            if (edge_is_late_for_flywheel_beat(t)) {
+                /* Flywheel already played this beat: re-anchor the phase only (no double trigger). */
+                last_f1_pulse_time_ms = t;
+                tempo_frac_acc = 0;
+                last_f1_from_flywheel = false;
+                continue;
+            }
             apply_external_pulse(t);
             /* Use edge time so queued bursts keep distinct phase for mult/div modes. */
             run_mode_update(t, true);
@@ -261,20 +339,48 @@ void clock_manager_update(void) {
     if (pending_tap_quadruple_boundary) {
         pending_tap_quadruple_boundary = false;
         uint32_t t0 = pending_tap_quadruple_t0_ms;
-        if (t0 > now) {
-            t0 = now;
-        }
         active_tempo_interval_ms = pending_tap_quadruple_interval_ms;
-        last_f1_pulse_time_ms = snap_phase_to_grid(t0, now, active_tempo_interval_ms);
-        generate_f1_pulse();
-        f1_tick_counter += 1u;
-        frame_had_f1 = true;
+        tempo_frac_q16 = pending_tap_frac_q16;
+        pending_tap_frac_q16 = 0;
+        tempo_frac_acc = 0;
+        tap_phase_corr_ms = 0;
+        if ((int32_t)(t0 - now) > 0) {
+            /* Anchor in the near future (human-latency compensation): let the flywheel fire F1 at t0. */
+            last_f1_pulse_time_ms = t0 - active_tempo_interval_ms;
+        } else {
+            last_f1_pulse_time_ms = snap_phase_to_grid(t0, now, active_tempo_interval_ms);
+            generate_f1_pulse();
+            last_f1_from_flywheel = false;
+            last_f1_emit_ms = now;
+            f1_tick_counter += 1u;
+            frame_had_f1 = true;
+        }
     } else if (active_tempo_interval_ms > 0 &&
-               (now - last_f1_pulse_time_ms) >= active_tempo_interval_ms) {
+               (int32_t)(now - last_f1_pulse_time_ms) >= (int32_t)active_tempo_interval_ms) {
+        /* Signed compare: the fractional-tempo carry can put last_f1 1 ms in the future; an unsigned
+         * difference would wrap to a huge value and fire F1 every loop (stuck gate on 1A/1B). */
         last_f1_pulse_time_ms += active_tempo_interval_ms;
+        if (tap_phase_corr_ms != 0) {
+            // Soft tap phase correction: move the grid by a fraction of the error each beat (bounded)
+            int32_t step = (tap_phase_corr_ms * TAP_PHASE_CORR_PCT) / 100;
+            if (step == 0) {
+                step = tap_phase_corr_ms;
+            }
+            int32_t const lim = (int32_t)(active_tempo_interval_ms / 4u);
+            step = (step > lim) ? lim : ((step < -lim) ? -lim : step);
+            last_f1_pulse_time_ms += (uint32_t)step;
+            tap_phase_corr_ms -= step;
+        }
+        tempo_frac_acc += tempo_frac_q16;
+        if (tempo_frac_acc >= 0x10000u) {
+            tempo_frac_acc -= 0x10000u;
+            last_f1_pulse_time_ms += 1u; // Sub-millisecond tempo: no long-term drift
+        }
         generate_f1_pulse();
         f1_tick_counter++;
         frame_had_f1 = true;
+        last_f1_from_flywheel = true;
+        last_f1_emit_ms = now;
     }
 
     if (external_clock_slaved) {

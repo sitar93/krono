@@ -1,0 +1,11 @@
+﻿KRONO v1.5.0 - flash instructions
+================================
+ONLINE (https://jolin.tech/krono_updater):
+  Use: krono_code_v1.5.0.bin
+  (PlatformIO DFU-suffixed - same format as historical releases e.g. v1.4.0)
+
+  Or: krono_code_v1.5.0.hex
+
+Do NOT use *_raw.bin on the online updater.
+
+CubeProgrammer: .hex, .bin, or *_raw.bin are all fine after a chip erase if needed.

@@ -190,3 +190,8 @@ static void update_phasing_output(jack_output_t pin, phasing_output_state_t* sta
         // }
     }
 }
+
+/** Current Group B deviation level (0..NUM_DELTA_LEVELS-1), for Aux LED status display. */
+uint8_t mode_phasing_get_delta_level(void) {
+    return current_delta_level;
+}

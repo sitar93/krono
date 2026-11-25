@@ -42,6 +42,16 @@ typedef enum {
     MODE_GAMMA_RATCHET, // 28: 1A–6A mult, 1B–6B div; MOD ×2 toggle
     MODE_GAMMA_ANTI_RATCHET, // 29: same routing; MOD ÷2 (half-speed) toggle
     MODE_GAMMA_START_STOP, // 30: same routing; MOD toggles output mute latch
+    MODE_DELTA_TIDES, // 31 TIDES: tempo-synced LFOs on 1A/2A/2B; MOD = waveform
+    MODE_DELTA_ORBIT, // 32 ORBIT: one LFO, 3 phases 120 deg apart; MOD = speed
+    MODE_DELTA_CHIMERA, // 33 CHIMERA: morphing wavetables
+    MODE_DELTA_WANDER, // 34 WANDER: smooth random
+    MODE_DELTA_BUTTERFLY, // 35 BUTTERFLY: Lorenz attractor CV
+    MODE_DELTA_MONOLITH, // 36 MONOLITH: audio drone
+    MODE_DELTA_STATIC, // 37 STATIC: audio noise
+    MODE_DELTA_PULSAR, // 38 PULSAR: audio percussive blips
+    MODE_DELTA_ALLOY, // 39 ALLOY: audio ring / XOR
+    MODE_DELTA_ASCENT, // 40 ASCENT: audio arpeggio
     NUM_OPERATIONAL_MODES // Keep this last for counting
 } operational_mode_t;
 
@@ -284,6 +294,55 @@ void mode_gamma_start_stop_reset(void);
 void mode_gamma_start_stop_on_mod_press(mod_press_event_t ev, uint32_t ts_ms);
 void mode_gamma_start_stop_set_state(bool muted);
 void mode_gamma_start_stop_get_state(bool *muted);
+
+// --- DELTA tier (31-40): analog modulation / audio on pseudo-DAC outputs (mode_delta.c) ---
+#define MODE_DELTA_NUM_MODES 10u
+void mode_delta_tides_init(void);
+void mode_delta_tides_update(const mode_context_t *context);
+void mode_delta_tides_reset(void);
+void mode_delta_tides_on_mod_press(mod_press_event_t ev, uint32_t ts_ms);
+void mode_delta_orbit_init(void);
+void mode_delta_orbit_update(const mode_context_t *context);
+void mode_delta_orbit_reset(void);
+void mode_delta_orbit_on_mod_press(mod_press_event_t ev, uint32_t ts_ms);
+void mode_delta_chimera_init(void);
+void mode_delta_chimera_update(const mode_context_t *context);
+void mode_delta_chimera_reset(void);
+void mode_delta_chimera_on_mod_press(mod_press_event_t ev, uint32_t ts_ms);
+void mode_delta_wander_init(void);
+void mode_delta_wander_update(const mode_context_t *context);
+void mode_delta_wander_reset(void);
+void mode_delta_wander_on_mod_press(mod_press_event_t ev, uint32_t ts_ms);
+void mode_delta_butterfly_init(void);
+void mode_delta_butterfly_update(const mode_context_t *context);
+void mode_delta_butterfly_reset(void);
+void mode_delta_butterfly_on_mod_press(mod_press_event_t ev, uint32_t ts_ms);
+void mode_delta_monolith_init(void);
+void mode_delta_monolith_update(const mode_context_t *context);
+void mode_delta_monolith_reset(void);
+void mode_delta_monolith_on_mod_press(mod_press_event_t ev, uint32_t ts_ms);
+void mode_delta_static_init(void);
+void mode_delta_static_update(const mode_context_t *context);
+void mode_delta_static_reset(void);
+void mode_delta_static_on_mod_press(mod_press_event_t ev, uint32_t ts_ms);
+void mode_delta_pulsar_init(void);
+void mode_delta_pulsar_update(const mode_context_t *context);
+void mode_delta_pulsar_reset(void);
+void mode_delta_pulsar_on_mod_press(mod_press_event_t ev, uint32_t ts_ms);
+void mode_delta_alloy_init(void);
+void mode_delta_alloy_update(const mode_context_t *context);
+void mode_delta_alloy_reset(void);
+void mode_delta_alloy_on_mod_press(mod_press_event_t ev, uint32_t ts_ms);
+void mode_delta_ascent_init(void);
+void mode_delta_ascent_update(const mode_context_t *context);
+void mode_delta_ascent_reset(void);
+void mode_delta_ascent_on_mod_press(mod_press_event_t ev, uint32_t ts_ms);
+/** Silence the DELTA audio engine now and resume after 2 s (call before flash saves: IRQs get masked). */
+void mode_delta_audio_hold(uint32_t now_ms);
+
+/** Per-mode persisted parameter (index 0..9 = modes 31..40). */
+void mode_delta_set_param(uint8_t index, uint8_t value);
+uint8_t mode_delta_get_param(uint8_t index);
 
 /** True for modes 12–20 and Gamma family: MOD short-press → mode_*_on_mod_press (not calc/fixed swap). */
 #define MODE_USES_MOD_GESTURES(m) \
