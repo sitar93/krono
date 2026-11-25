@@ -74,7 +74,7 @@ KRONO is a 4HP programmable multi-mode clock and rhythm generator with tap tempo
   refines it smoothly. See **Tap tempo** below.
 - **External clock**: send clock to `TAP IN`. KRONO validates and copies the external tempo.
 
-In modes 1-20, base tempo is available on outputs `1A` and `1B`.
+In modes 1-20, base tempo is available on outputs `1A` and `1B`; in DELTA modes (31-40) on `1B`.
 
 ### 2) Select mode
 
@@ -178,7 +178,37 @@ a save.
 - **Aux LED** (under MOD): feedback for tap, mode changes, parameter updates and save events, plus the state of
   the current mode: steady = freeze / stop / B bank active, breathing = continuous modulation, looping blinks =
   selected bank / pattern / profile number.
-- **OUT 1A / 1B**: base clock reference (modes 1-20).
+- **OUT 1A / 1B**: base clock reference (modes 1-20); in DELTA modes `1B` = base clock, `3B` = counter-phase clock.
+
+## Tap tempo
+
+Tap the **TAP** button along with the music and KRONO follows you.
+
+- **Tap 4 times** in time with the beat. On the 4th tap the tempo locks and KRONO starts playing from that tap
+  (MOD LED double flash). **Keep tapping** for more precision: every extra tap refines the tempo with no jumps in
+  the rhythm. After 16-32 taps KRONO stays in time with the music for a long time, even after you stop.
+- **Back in phase:** if KRONO slowly drifts away from the music, tap a few times along with the beat; it realigns
+  smoothly within a beat or two, even after a long pause.
+- **Mistakes are forgiven:** a single off-beat tap is ignored; skipped beats are counted correctly.
+- **New tempo:** just start tapping it. After two taps that do not fit the old tempo KRONO starts over, and it
+  locks to the new tempo about four taps in.
+- **Round tempos:** when your taps are very close to a whole BPM value (120, 128...), KRONO settles exactly on it.
+- With an external clock in **TAP IN**, the clock takes priority and TAP is ignored. When the clock is removed,
+  KRONO keeps its tempo and phase.
+
+## Tap latency calibration (optional)
+
+Most people tap slightly ahead of the beat they hear. KRONO can measure your personal timing and compensate for it.
+
+1. Hold **MOD** while powering on, for about 2 s, until the two LEDs blink alternately. Release MOD.
+2. Outputs **1A** and **1B** click at 100 BPM (TAP LED lit). Tap **TAP** 16 times along with the click (patching
+   1A into a sound and tapping to what you hear works best). The first 4 taps are a warm-up.
+3. **Success:** both LEDs give two quick bursts of three flashes, the value is stored and KRONO starts normally.
+   **Try again:** both LEDs lit for 1 s (taps too irregular, or you sped up / slowed down), then the click restarts.
+   **Cancel:** press MOD (one long flash); the procedure also cancels itself after 40 s. The previous calibration is kept.
+
+The calibration survives power cycles, saves and firmware updates via the online updater; it only affects tap
+tempo. Without calibration no compensation is applied.
 
 ## Build firmware
 
@@ -194,10 +224,14 @@ DFU upload workflow (if needed): hold `BOOT0`, pulse `NRST`, release `BOOT0`, th
 ## Firmware structure
 
 - `src/main.c` - boot, loop, callbacks, save/load glue.
-- `src/input_handler.c` - tap, mode selection state machine, MOD/CV input routing.
+- `src/input_handler.c` - mode selection state machine, MOD/CV input routing, external clock lock.
+- `src/input_tempo.c` - tap tempo (least-squares fit).
 - `src/clock_manager.c` - clock scheduling and mode update dispatch.
-- `src/modes/` - one file per mode behavior.
-- `src/drivers/` - low-level I/O, tap, external clock, persistence, RTC.
+- `src/aux_led.c`, `src/aux_led_mode_status.c` - MOD LED rendering and per-mode status.
+- `src/tap_calibration.c` - power-on tap latency calibration.
+- `src/modes/` - one file per mode behavior (`mode_delta.c` / `mode_delta_audio.c` for 31-40).
+- `src/drivers/` - low-level I/O, tap, external clock, persistence, analog outputs (PWM DAC), 1-bit audio voices,
+  calibration storage.
 - `src/variables.h` - timing constants and tunables.
 
 ## Links
@@ -208,31 +242,3 @@ DFU upload workflow (if needed): hold `BOOT0`, pulse `NRST`, release `BOOT0`, th
 ## License
 
 This project is licensed under [CC BY-NC-SA 4.0][cc-by-nc-sa].
-
-## Tap tempo
-
-Tap the **TAP** button along with the music and KRONO follows you.
-
-- **Tap 4 times** in time with the beat. On the 4th tap the tempo locks and KRONO starts playing from that tap
-  (MOD LED double flash). **Keep tapping** for more precision: every extra tap refines the tempo with no jumps in
-  the rhythm. After 16-32 taps KRONO stays in time with the music for a long time, even after you stop.
-- **Back in phase:** if KRONO slowly drifts away from the music, tap a few times along with the beat; it realigns
-  smoothly within a beat or two, even after a long pause.
-- **Mistakes are forgiven:** a single off-beat tap is ignored; skipped beats are counted correctly.
-- **New tempo:** just start tapping it; after a couple of taps KRONO locks to it.
-- **Round tempos:** when your taps are very close to a whole BPM value (120, 128...), KRONO settles exactly on it.
-- With an external clock in **TAP IN**, the clock takes priority and TAP is ignored. When the clock is removed,
-  KRONO keeps its tempo and phase.
-
-## Tap latency calibration (optional)
-
-Most people tap slightly ahead of the beat they hear. KRONO can measure your personal timing and compensate for it.
-
-1. Hold **MOD** while powering on, for about 2 s, until the two LEDs blink alternately. Release MOD.
-2. Outputs **1A** and **1B** click at 100 BPM (TAP LED lit). Tap **TAP** 16 times along with the click (patching
-   1A into a sound and tapping to what you hear works best). The first 4 taps are a warm-up.
-3. **Success:** both LEDs flash twice in a row, the value is stored and KRONO starts normally. **Try again:** both
-   LEDs lit for 1 s (taps too irregular, or you sped up / slowed down), the click restarts. **Cancel:** press MOD.
-
-The calibration survives power cycles, saves and firmware updates via the online updater; it only affects tap
-tempo. Without calibration no compensation is applied.

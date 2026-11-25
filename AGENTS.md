@@ -10,6 +10,7 @@ This file is the **single technical reference** for anyone modifying the codebas
 |--------|--------|
 | Usage, hardware, modes (user) | `README.md` |
 | OMEGA tier (modes 21–30): behavior table (user) + firmware notes (this file) | `README.md` + **OMEGA / internal Gamma** section below |
+| DELTA tier (modes 31–40): behavior table (user) + firmware notes (this file) | `README.md` + **DELTA tier** section below |
 | What changed per release | `CHANGELOG.txt` |
 | License | `LICENSE.txt` |
 | Build, style, architecture, debug | This file (`AGENTS.md`) |
@@ -72,7 +73,8 @@ src/
 ├── aux_led.c/h            # PA3 = TIM2_CH4 PWM renderer: event layer > count layer > status (steady / breathe)
 ├── aux_led_mode_status.c/h # Per-mode status mapping for the MOD LED
 ├── tap_calibration.c/h    # Boot-time tap latency calibration (hold MOD at power-on)
-├── input_handler.c/h      # Inputs, tap averaging, op-mode SM (+ Omega + Gamma), ext clock, tempo dispatch, short-MOD mode actions (12–30)
+├── input_handler.c/h      # Inputs, op-mode SM (BETA / OMEGA / DELTA tiers), ext clock lock, short-MOD mode actions (12–40)
+├── input_tempo.c/h        # Tap tempo: least-squares fit, lock / refine (calls clock_manager directly)
 ├── clock_manager.c/h      # F1 pulse, mode_context, mode dispatch
 ├── status_led.c/h
 ├── drivers/               # io, tap, ext_clock, persistence, rtc, analog_out (PWM DAC), audio_gates (1-bit voices),
@@ -87,10 +89,14 @@ platformio.ini
 
 ## Runtime data flow (tempo)
 
-1. `tap.c` — EXTI0 on PA0: intervals → `tap_detected()` / `tap_get_interval()`.
-2. `input_handler.c` — tap quadruple policy in `input_tempo.c`; tempo callback on boundaries + external clock; op-mode SM can drain tap events.
-3. `main.c` — `on_tap_tempo_change` → `clock_manager_arm_tap_quadruple_boundary()` on tap 4/8/…, else `clock_manager_set_internal_tempo()` (external / fallback).
-4. `clock_manager.c` — schedules F1; passes `mode_context_t` to active `mode_*_update()`.
+1. `tap.c` — EXTI0 on PA0: press timestamp → `tap_detected()` / `tap_get_last_press_time_ms()`.
+2. `input_handler.c` — routes taps to `input_tempo_handle_tap_event()` (only when the op-mode SM is idle and Clock In is
+   not hard-following) and gives LED feedback (blink per accepted tap, double blink on lock); external clock tempo goes
+   through the tempo callback.
+3. `input_tempo.c` — fit → `clock_manager_tap_lock()` (tap 4) / `clock_manager_tap_refine()` (later taps).
+   `main.c` `on_tap_tempo_change` is now used by the external-clock path (`clock_manager_set_internal_tempo()`).
+4. `clock_manager.c` — schedules F1 (Q16 fractional tempo, soft phase correction); passes `mode_context_t` to the active
+   `mode_*_update()`.
 
 **Tap policy (v1.5.0, supersedes the v1.4.0 text below):** `input_tempo.c` fits a least-squares line through
 (beat index, tap time). Tempo = slope over up to `TAP_FIT_MAX_TAPS` (64) taps, phase anchor = last 16
@@ -108,7 +114,7 @@ edge = external rising edge. Precise master period from long runs of consistent 
 Q16 ms) feeds `clock_manager_set_tempo_q16_keep_phase`; on lock loss tempo and phase are kept (no re-anchor). An
 edge arriving shortly after a flywheel F1 re-anchors phase without a second F1. Flywheel compares use signed math.
 
-**External clock (v1.4.1.6):** PB3 rising edges are measured while **internal F1 always keeps running** (flywheel). Hard-follow starts only after a **stable triplet** (`max−min ≤ max(EXT_CLOCK_STABILITY_ABS_MS, min×5%)`). Edges within `EXT_CLOCK_ECHO_WINDOW_MS` of a local F1 are still measured for validation/lock but **not** queued for F1 forwarding (autopatch must not double-F1; must not drop real masters near our tempo). On first lock: save `tempo_before_ext_ms`, `clock_manager_begin_external_slave()` (flush queue, arm forwarding, one F1 on validating edge; mode update deferred). While following, in-range non-echo edges snap F1; out-of-range edges break follow immediately. Lock loss: no non-echo in-range edge within `(locked_interval + EXT_CLOCK_LOCK_GRACE_MS)` → end follow and keep session tempo on the flywheel (no multi-second mute). Tap is ignored only while hard-following. Unfollow restore priority: **session** validated interval → `tempo_before_ext_ms` → `DEFAULT_TEMPO_INTERVAL`. PB3 stays `GPIO_PUPD_NONE`; never reclaim **PA13/PA14** (SWD). Free **PA15/PB3/PB4** once in `io_init` via `io_release_jtag_only_pins()` (**v1.4.1.4/1.5** — do not re-run after EXTI arm). **v1.4.1.3+:** queued edges use per-edge timestamps; wall-clock mode update while following; pulses retrigger.
+**External clock (v1.4.1.6; edge polarity changed in v1.5.0, see above):** PB3 edges are measured while **internal F1 always keeps running** (flywheel). Hard-follow starts only after a **stable triplet** (`max−min ≤ max(EXT_CLOCK_STABILITY_ABS_MS, min×5%)`). Edges within `EXT_CLOCK_ECHO_WINDOW_MS` of a local F1 are still measured for validation/lock but **not** queued for F1 forwarding (autopatch must not double-F1; must not drop real masters near our tempo). On first lock: save `tempo_before_ext_ms`, `clock_manager_begin_external_slave()` (flush queue, arm forwarding, one F1 on validating edge; mode update deferred). While following, in-range non-echo edges snap F1; out-of-range edges break follow immediately. Lock loss: no non-echo in-range edge within `(locked_interval + EXT_CLOCK_LOCK_GRACE_MS)` → end follow and keep session tempo on the flywheel (no multi-second mute). Tap is ignored only while hard-following. Unfollow restore priority: **session** validated interval → `tempo_before_ext_ms` → `DEFAULT_TEMPO_INTERVAL`. PB3 stays `GPIO_PUPD_NONE`; never reclaim **PA13/PA14** (SWD). Free **PA15/PB3/PB4** once in `io_init` via `io_release_jtag_only_pins()` (**v1.4.1.4/1.5** — do not re-run after EXTI arm). **v1.4.1.3+:** queued edges use per-edge timestamps; wall-clock mode update while following; pulses retrigger.
 
 ### BETA / OMEGA selection (mode families)
 
@@ -119,13 +125,18 @@ Mode-family selection reuses the **same** op-mode change state machine as modes 
 | ALPHA (1–10) | User qualifies with Tap hold ≥ `OP_MODE_TAP_HOLD_DURATION_MS`, releases Tap **before** `OP_MODE_TAP_OMEGA_HOLD_MS` from **first** press | `op_mode_change_cb(N)` with N = 1…10 |
 | BETA (11–20) | User **keeps holding** Tap until `OP_MODE_TAP_OMEGA_HOLD_MS` (~2 s from first press; see `variables.h`) | `op_mode_change_cb(N + 10)`; N wrapped to 1…10 if click count exceeds 10 |
 | OMEGA (21–30, internal Gamma) | User **keeps holding** Tap until `OP_MODE_TAP_GAMMA_HOLD_MS` (~3 s from first press) | `op_mode_change_cb(N + 20)`; N wrapped to 1…10; supersedes BETA for confirm if both thresholds crossed |
+| DELTA (31–40) | User **keeps holding** Tap until `OP_MODE_TAP_DELTA_HOLD_MS` (~4 s) | `op_mode_change_cb(N + 30)`; N wrapped to 1…10; supersedes OMEGA |
 
-**Timings** (`variables.h`): `OP_MODE_TAP_HOLD_DURATION_MS`, `OP_MODE_TAP_OMEGA_HOLD_MS`, `OP_MODE_TAP_GAMMA_HOLD_MS`, `OP_MODE_TAP_OMEGA_MAX_HOLD_MS` (abort if Tap never released within this window from press start). **OMEGA Aux (internal Gamma threshold)** uses `AUX_LED_MULTI_PULSE_ON_MS` / `AUX_LED_MULTI_PULSE_GAP_MS` via `krono_aux_led_pattern_start(2, …)` in `main.c` (BETA remains single soft blink).
+**Timings** (`variables.h`): `OP_MODE_TAP_HOLD_DURATION_MS`, `OP_MODE_TAP_OMEGA_HOLD_MS`, `OP_MODE_TAP_GAMMA_HOLD_MS`, `OP_MODE_TAP_DELTA_HOLD_MS`, `OP_MODE_TAP_OMEGA_MAX_HOLD_MS` (6 s: abort if Tap never released within this window from press start).
 
 **PA3 feedback**
 
-- At **1 s** qualify and at **BETA arm**: `aux_led_blink_request_cb()` → `main.c` `pa3_soft_blink_arm()` (PA3 on + `status_led_pa3_blink_end_time`, typically +100 ms). `pa3_soft_blink_arm()` calls `krono_aux_led_pattern_cancel()` so a queued multi-pulse pattern does not fight a new soft blink.
-- At **OMEGA arm** (~3 s, internal Gamma threshold): `gamma_aux_pattern_cb` → `krono_aux_led_pattern_start(2, …)`; pump + `krono_aux_led_pattern_active()` as below.
+- At **1 s** qualify: `aux_led_blink_request_cb()` → `main.c` `pa3_soft_blink_arm()` (single soft blink).
+- Tier arm announcements are multi-pulse patterns started directly in `input_handler.c` with
+  `krono_aux_led_pattern_start(n, AUX_LED_MULTI_PULSE_ON_MS, AUX_LED_MULTI_PULSE_GAP_MS)`: BETA n=2, OMEGA n=3, DELTA
+  n=4 (`gamma_aux_pattern_cb` is kept in the init signature but no longer used).
+- During selection the MOD LED follows MOD (`op_mode_mod_feedback` → `krono_aux_led_set_hold`); on confirm both LEDs
+  stay lit for the blocking flash save (`mode_confirm_led_pending` / `aux_led_force_on` in `main.c`).
 - **Multi-pulse** pattern: `krono_aux_led_pattern_pump(now)` in the main loop; `krono_aux_led_pattern_active()` — while true, skip the generic PA3-off timeout. `krono_aux_led_cancel_soft_timer()` (in `main.c`) clears the soft deadline when a pattern starts.
 
 **`main.c` coordination**
@@ -138,7 +149,7 @@ Mode-family selection reuses the **same** op-mode change state machine as modes 
 
 ### Modes 12–20 and OMEGA / internal Gamma (short MOD path)
 
-- **`MODE_USES_MOD_GESTURES(m)`** in `modes.h` — true for `MODE_DRIFT` … `MODE_ACCUMULATE` and Gamma modes (`MODE_GAMMA_SEQUENTIAL_RESET` … as added).
+- **`MODE_USES_MOD_GESTURES(m)`** in `modes.h` — true for `MODE_DRIFT` … `MODE_ACCUMULATE` and every mode from `MODE_GAMMA_SEQUENTIAL_RESET` up (OMEGA and DELTA). `MODE_SKIPS_AUTO_F1_CLOCK_ON_1AB` likewise covers OMEGA and DELTA.
 - **`handle_button_calc_mode_swap()`** in `input_handler.c`: short MOD release (within `CALC_SWAP_MAX_PRESS_DURATION_MS`) → `mod_press_cb(MOD_PRESS_EVENT_SINGLE)`.
 - **PB4 CV gate** (`input_handler_update`, after `ext_gate_swap_requested`): if `MODE_USES_MOD_GESTURES`, same as short MOD → `mod_press_cb`; else FIXED → bank; else calc swap.
 - **Gamma clock outputs:** `MODE_SKIPS_AUTO_F1_CLOCK_ON_1AB(m)` — when true, `clock_manager` does not drive 1A/1B as the automatic base-clock mirror; the mode drives them. **Mode 21** sequential clock: one jack per F1 — **A** 1A→6A, then **B** 1B→6B (12-step cycle); `CALC_MODE_SWAPPED` reverses the full cycle. **Mode 22:** same 12-step sweep; MOD/CV **toggles freeze** (hold step); `gamma_seq_freeze_step` is **0..11** in `krono_state_t`. **Mode 23:** six **trip** patterns; MOD/CV cycles pattern index and resets step; `gamma_seq_trip_*` in flash. **(1)** inverted pairs 1A+6B…6A+1B (6 F1); **(2)** bounce on those pairs, 10 steps (ends 2A+5B); **(3)** stairs 1A,1B,…,6A,6B; **(4)** circle 1A→6A then 6B→1B; **(5)** convergence pairs (1A+4B, 6A+3B, …); **(6)** groups (four outs × 3). **Calc swapped** = play current pattern **backwards**. Internal `f1_rising_edge` / `f1_counter` still advance from tempo.
@@ -183,11 +194,11 @@ Mode-family selection reuses the **same** op-mode change state machine as modes 
 
 - `millis()` lives in `main.c` (SysTick 1 ms).
 - Modes should prefer `context->current_time_ms` over raw `millis()` where timing must align with the clock manager.
-- Mode-specific persisted fields are applied in `main.c` / `save_current_state()` (chaos divisor, swing indices, fixed-mode bank, modes 12–20 MOD states, and Gamma fields for modes 22–23 / 26–30) alongside `krono_state_t`.
-- Persistence: `krono_state_t` in `persistence.h`; flash address `0x08060000`. Save is triggered via input-handler save path (see `README.md`).
-- **LEDs (PA15 status, PA3 aux)** — see **`README.md` → LEDs: behavior vs firmware** for the user-facing table. Implementation summary:
-  - **PA15:** `status_led.c` → `set_led(bool on)` → `set_output(STATUS_LED_PIN, on)` (logical **on** = GPIO **high** on the pin as driven by `io.c`). Pattern state machine: `pending_off_gap_ms` chooses gap after each pulse — `STATUS_LED_INTER_PULSE_OFF_MS` after a normal (N) pulse, `STATUS_LED_AFTER_LONG_OFF_MS` after a long (L) pulse; end-of-loop dark time uses `STATUS_LED_SEQUENCE_GAP_MS`. Pulse shapes: `status_led_pulse_count()` / `status_led_pulse_is_long()` — user mode **1–9** = that many **N** pulses; **≥10** = **(tens)×L** then **(units)×N** (e.g. 20=L,L; 21=L,L,N; 30=L,L,L). ON times `STATUS_LED_BASE_INTERVAL_MS` (N) and `STATUS_LED_LONG_ON_MS` (L). If a board shows light when the code intends dark, invert mapping inside `set_led()` only.
-  - **PA3:** `main.c` `pa3_soft_blink_arm()` and optional `krono_aux_led_pattern_pump()` / `krono_aux_led_pattern_active()`; Omega uses the same soft blink as qualify via `aux_led_blink_request_cb()`.
+- Mode-specific persisted fields are applied in `main.c` / `save_current_state()` / `mode_state.c` (chaos divisor, swing indices, fixed-mode bank, modes 12–20 MOD states, Gamma fields for modes 22–23 / 26–30, `delta_param[10]` for 31–40) alongside `krono_state_t`. Changing the struct layout resets saved settings once (checksum).
+- Persistence: `krono_state_t` in `persistence.h`; flash sector 7 at `0x08060000`. Save is triggered via input-handler save path (see `README.md`). Tap calibration uses sector 6 (`0x08040000`), never erased by state saves.
+- **LEDs (PA15 status, PA3 aux)** — user-facing description in **`README.md`** (Select mode, Fast-Skip, I/O cheat sheet). Implementation summary:
+  - **PA15:** `status_led.c` → `set_led(bool on)` → `set_output(STATUS_LED_PIN, on)` (logical **on** = GPIO **high** on the pin as driven by `io.c`). Pattern state machine: `pending_off_gap_ms` chooses gap after each pulse — `STATUS_LED_INTER_PULSE_OFF_MS` after a normal (N) pulse, `STATUS_LED_AFTER_LONG_OFF_MS` after a long (L) pulse; end-of-loop dark time uses `STATUS_LED_SEQUENCE_GAP_MS`. Pulse shapes: `status_led_pulse_count()` / `status_led_pulse_is_long()` — user mode **1–9** = that many **N** pulses; **≥10** = **(tens)×L** then **(units)×N** (e.g. 20=L,L; 21=L,L,N; 30=L,L,L; 40=L,L,L,L). ON times `STATUS_LED_BASE_INTERVAL_MS` (N) and `STATUS_LED_LONG_ON_MS` (L). If a board shows light when the code intends dark, invert mapping inside `set_led()` only.
+  - **PA3:** TIM2_CH4 PWM rendered by `aux_led.c` (event layer > count layer > status layer). Events come from `set_output(JACK_OUT_AUX_LED_PA3, …)` (`pa3_soft_blink_arm()`, `krono_aux_led_pattern_*`, hold); status from `aux_led_mode_status.c`. On a steady-on status, event flashes render as brief offs.
 
 ---
 
@@ -197,7 +208,8 @@ Mode-family selection reuses the **same** op-mode change state machine as modes 
 2. Add `mode_*_init/update/reset` in new `mode_*.c` / `mode_*.h`, declared in `modes.h`.
 3. Register in `modes.c` (init/reset tables).
 4. Register update in `clock_manager.c` (`mode_update_functions[]`).
-5. Update `status_led.c` (`status_led_pulse_count` / `status_led_pulse_is_long`) so the new user mode index matches the intended N/L pattern (see existing rules for modes 1–30).
+5. Check `status_led.c` (`status_led_pulse_count` / `status_led_pulse_is_long`): the tens / units rule already covers modes 1–40.
+5b. Add the mode's MOD LED status in `aux_led_mode_status.c` (steady / breathe / count / none).
 6. Extend `krono_state_t` and `main.c` load/save paths if the mode needs new persisted fields.
 7. If the mode uses short MOD actions like 12–20: extend `MODE_USES_MOD_GESTURES`, add `mode_*_on_mod_press`, register in **`mode_mod_dispatch.c`**, implement at least `MOD_PRESS_EVENT_SINGLE`.
 8. Update user-facing **`README.md`** (modes table + input notes if behavior differs).
@@ -212,8 +224,8 @@ Mode-family selection reuses the **same** op-mode change state machine as modes 
 
 **Symptoms:**
 
-- Tap tempo “stuck” or wrong phase → `TAP_PATTERN_IDLE_RESET_MS`, median + blend in `input_tempo.c`; external-clock reset paths in `input_handler.c`.
-- Phase feels wrong → timestamp passed into `clock_manager_set_internal_tempo()`.
+- Tap tempo drifting or wrong phase → fit windows (`TAP_FIT_MAX_TAPS`, `TAP_FIT_PHASE_TAPS`), whole-BPM snap, the stored calibration offset (`tap_calib_get_offset_ms`); reproduce with `../krono_tap_lab/krono_tap_lab.html` and its JSON logs.
+- Tap phase consistently early / late → calibration offset; soft correction `TAP_PHASE_CORR_PCT` in `clock_manager.c`.
 - Tap ignored after gestures → op-mode SM draining `tap_detected()` in non-idle states.
 - Modes 12–30 MOD short ignored → check `CALC_SWAP_MAX_PRESS_DURATION_MS`, cooldown (`last_calc_swap_trigger_time`), `INPUT_SM_IDLE` gating, and `external_clock_active` early return.
 - Multi-pulse Aux looks like one long blink if fired as two quick `aux_led_blink_request_cb()` calls → use `krono_aux_led_pattern_start()` + pump + `krono_aux_led_pattern_active()` guard in `main.c`.
@@ -238,7 +250,7 @@ If the PlatformIO sidebar stays on “initializing”, point the extension at th
 }
 ```
 
-Use **Tasks: Run Task** for `PlatformIO: Build/Upload/Clean` if defined in `.vscode/tasks.json`. Keybindings belong in **User Keyboard Shortcuts (JSON)**, not always in the project.
+`.vscode/` (except `extensions.json`) and `.cursor/` are local and git-ignored. Use **Tasks: Run Task** for `PlatformIO: Build/Upload/Clean` if you define them in a local `.vscode/tasks.json`. Keybindings belong in **User Keyboard Shortcuts (JSON)**.
 
 ---
 

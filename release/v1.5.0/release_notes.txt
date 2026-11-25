@@ -55,7 +55,7 @@ Tap tempo has been rebuilt to follow you musically:
 
 ### Optional: tap latency calibration
 
-Most people tap slightly ahead of the beat they hear. KRONO can now measure your personal timing and compensate for it. Hold **MOD** while powering on until the two LEDs blink alternately, release, then tap 16 times along with the 100 BPM click on 1A. Patching 1A into a sound and tapping to what you hear works best. Both LEDs flash twice when it is done; press MOD to cancel. The result is kept across power cycles and future firmware updates. A new KRONO works perfectly well without it.
+Most people tap slightly ahead of the beat they hear. KRONO can now measure your personal timing and compensate for it. Hold **MOD** while powering on until the two LEDs blink alternately, release, then tap 16 times along with the 100 BPM click on 1A. Patching 1A into a sound and tapping to what you hear works best. When it is done, both LEDs give two quick bursts of flashes; press MOD to cancel. The result is kept across power cycles and future firmware updates. A new KRONO works perfectly well without it.
 
 ## Better external clock
 
